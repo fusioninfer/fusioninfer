@@ -1,0 +1,9 @@
+apiVersion: fusioninfer.io/v1alpha1
+kind: InferenceService
+metadata:
+  labels:
+    app.kubernetes.io/name: fusioninfer
+    app.kubernetes.io/managed-by: kustomize
+  name: inferenceservice-sample
+spec:
+  # TODO(user): Add fields here

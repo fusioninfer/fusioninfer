@@ -167,11 +167,11 @@ These configurations are translated into `InferencePool`, `EndpointPickerConfig`
 // InferenceServiceSpec defines the desired state of InferenceService
 type InferenceServiceSpec struct {
     // Roles defines the components of the inference service
-    Roles []Role `json:"roles"`
+    Roles []RoleSpec `json:"roles"`
 }
 
 // Role defines a component in the inference pipeline
-type Role struct {
+type RoleSpec struct {
     // Name is the identifier for this role
     Name string `json:"name"`
     

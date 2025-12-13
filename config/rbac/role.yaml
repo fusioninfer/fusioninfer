@@ -1,0 +1,35 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - fusioninfer.io
+  resources:
+  - inferenceservices
+  - modelloaders
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - fusioninfer.io
+  resources:
+  - inferenceservices/finalizers
+  - modelloaders/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - fusioninfer.io
+  resources:
+  - inferenceservices/status
+  - modelloaders/status
+  verbs:
+  - get
+  - patch
+  - update
