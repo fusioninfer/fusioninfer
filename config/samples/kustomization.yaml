@@ -1,0 +1,5 @@
+## Append samples of your project ##
+resources:
+- v1alpha1_inferenceservice.yaml
+- v1alpha1_modelloader.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples
