@@ -290,8 +290,8 @@ func (in *Role) DeepCopyInto(out *Role) {
 		*out = new(v1.GatewaySpec)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.Replica != nil {
-		in, out := &in.Replica, &out.Replica
+	if in.Replicas != nil {
+		in, out := &in.Replicas, &out.Replicas
 		*out = new(int32)
 		**out = **in
 	}
