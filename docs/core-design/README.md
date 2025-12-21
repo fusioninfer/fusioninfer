@@ -5,24 +5,24 @@
 - [Motivation](#motivation)
   - [Goals](#goals)
   - [Non-Goals](#non-goals)
+- [User Stories](#user-stories)
+  - [Story 1: Deploy a monolithic LLM service](#story-1-deploy-a-monolithic-llm-service)
+  - [Story 2: Deploy a disaggregated prefill/decode service](#story-2-deploy-a-disaggregated-prefilldecode-service)
+  - [Story 3: Deploy a multi-node inference service for large models](#story-3-deploy-a-multi-node-inference-service-for-large-models)
+  - [Story 4: Deploy a disaggregated multi-node prefill/decode service](#story-4-deploy-a-disaggregated-multi-node-prefilldecode-service)
 - [Proposal](#proposal)
-  - [User Stories](#user-stories)
-    - [Story 1: Deploy a monolithic LLM service](#story-1-deploy-a-monolithic-llm-service)
-    - [Story 2: Deploy a disaggregated prefill/decode service with custom scheduling](#story-2-deploy-a-disaggregated-prefilldecode-service-with-custom-scheduling)
-  - [Notes/Constraints/Caveats](#notesconstraintscaveats)
-  - [Risks and Mitigations](#risks-and-mitigations)
-- [Design Details](#design-details)
+  - [Component Types](#component-types)
+  - [Reconciliation Logic](#reconciliation-logic)
+    - [Monolithic Deployment (Story 1)](#monolithic-deployment-story-1)
+    - [Disaggregated PD Deployment (Story 2)](#disaggregated-pd-deployment-story-2)
+    - [Multi-Node Deployment (Story 3)](#multi-node-deployment-story-3)
+    - [Disaggregated Multi-Node Deployment (Story 4)](#disaggregated-multi-node-deployment-story-4)
+  - [LeaderWorkerSet (LWS) Workload Management](#leaderworkerset-lws-workload-management)
+  - [Gang Scheduling Behavior](#gang-scheduling-behavior)
+    - [PodGroup Management](#podgroup-management)
+    - [Key Annotations for Volcano Gang Scheduling](#key-annotations-for-volcano-gang-scheduling)
+    - [InferenceService Controller responsibilities](#inferenceservice-controller-responsibilities)
   - [CRD Structure Overview](#crd-structure-overview)
-  - [Role-Based](#role-based-topology)
-  - [Plugin System Integration](#plugin-system-integration)
-  - [Backward Compatibility](#backward-compatibility)
-  - [Test Plan](#test-plan)
-    - [Unit Tests](#unit-tests)
-    - [Integration Tests](#integration-tests)
-  - [Graduation Criteria](#graduation-criteria)
-- [Implementation History](#implementation-history)
-- [Drawbacks](#drawbacks)
-- [Alternatives](#alternatives)
 <!-- /toc -->
 
 ## Summary
@@ -50,14 +50,9 @@ Modern LLM serving systems increasingly adopt **disaggregation** (separating pre
 - Implement the underlying inference engine (e.g., vLLM, TensorRT-LLM) — only orchestrate it.
 - Support non-LLM workloads.
 
-## Proposal
+## User Stories
 
-The `InferenceService` CR will serve as the primary user-facing API for LLM deployment. 
-Users declare **roles** (a list of components), each identified by a user-chosen name and classified by its componentType.
-
-### User Stories
-
-#### Story 1: Deploy a monolithic LLM service
+### Story 1: Deploy a monolithic LLM service
 
 As a developer, I want to deploy Qwen-3 as a single-service endpoint.
 
@@ -87,7 +82,7 @@ spec:
                   nvidia.com/gpu: "1"
 ```
 
-#### Story 2: Deploy a disaggregated prefill/decode service
+### Story 2: Deploy a disaggregated prefill/decode service
 
 As a developer, I want to deploy a prefill/decode disaggregated inference service for Qwen-3.
 
@@ -138,7 +133,7 @@ spec:
                   nvidia.com/gpu: "1"
 ```
 
-#### Story 3: Deploy a multi-node inference service for large models
+### Story 3: Deploy a multi-node inference service for large models
 
 As a developer, I want to deploy DeepSeek-R1 (671B) using multi-node tensor parallelism. System deploys 2 replicas × 4 nodes = 8 pods, each with 8 GPUs (total 64 GPUs for tensor parallelism).
 
@@ -172,7 +167,7 @@ spec:
                   nvidia.com/gpu: "8"
 ```
 
-#### Story 4: Deploy a disaggregated multi-node prefill/decode service
+### Story 4: Deploy a disaggregated multi-node prefill/decode service
 
 As a developer, I want to deploy DeepSeek-R1 with prefill/decode disaggregation and multi-node parallelism. System deploys prefill (1 replica × 2 nodes = 2 pods) + decode (2 replicas × 4 nodes = 8 pods), total 10 pods with 80 GPUs.
 
@@ -231,6 +226,11 @@ spec:
                   nvidia.com/gpu: "8"
 ```
 
+## Proposal
+
+The `InferenceService` CR will serve as the primary user-facing API for LLM deployment. 
+Users declare **roles** (a list of components), each identified by a user-chosen name and classified by its componentType.
+
 ### Component Types
 
 | componentType | Description |
@@ -239,11 +239,11 @@ spec:
 | `prefiller` | Handles prompt ingestion and KV cache generation |
 | `decoder` | Performs autoregressive token generation |
 
-### Component Diagram
+### Reconciliation Logic
 
 The following diagrams illustrate the resource topology for different deployment scenarios.
 
-#### Diagram 1: Monolithic Deployment (Story 1)
+#### Monolithic Deployment (Story 1)
 
 A simple single-role deployment where each pod handles the full inference lifecycle.
 
@@ -272,7 +272,7 @@ A simple single-role deployment where each pod handles the full inference lifecy
       Total: 1 replica × 1 node × 1 GPU = 1 GPU
 ```
 
-#### Diagram 2: Disaggregated PD Deployment (Story 2)
+#### Disaggregated PD Deployment (Story 2)
 
 Prefill and decode are separated into independent roles for better resource utilization.
 
@@ -315,7 +315,7 @@ Prefill and decode are separated into independent roles for better resource util
       Total: prefill (2 × 1 GPU) + decode (4 × 1 GPU) = 6 GPUs
 ```
 
-#### Diagram 3: Multi-Node Deployment (Story 3)
+#### Multi-Node Deployment (Story 3)
 
 Large model deployment using LeaderWorkerSet (LWS) for multi-node tensor parallelism.
 
@@ -356,7 +356,7 @@ Large model deployment using LeaderWorkerSet (LWS) for multi-node tensor paralle
       Total: inference (2 replicas × 4 nodes × 8 GPUs) = 8 pods, 64 GPUs
 ```
 
-#### Diagram 4: Disaggregated Multi-Node Deployment (Story 4)
+#### Disaggregated Multi-Node Deployment (Story 4)
 
 Combines prefill/decode disaggregation with multi-node parallelism for maximum scalability.
 
@@ -483,7 +483,7 @@ spec:
                 nvidia.com/gpu: "8"
 ```
 
-## Gang Scheduling Behavior
+### Gang Scheduling Behavior
 
 The **InferenceService Controller** creates and manages PodGroups for all scenarios. Gang scheduling behavior depends on the `minTaskMember` configuration in the PodGroup.
 
@@ -510,7 +510,7 @@ Example: `prefill (1×2 nodes=16 GPUs)` + `decode (2×4 nodes=64 GPUs)` = 80 GPU
 
 > **Note**: With `minTaskMember: {prefill: 1, decode: 1}`, Volcano blocks scheduling unless **both** prefill (16 GPUs) AND decode (32 GPUs) can be satisfied simultaneously (requires ≥48 GPUs).
 
-### PodGroup Management
+#### PodGroup Management
 
 The **InferenceService Controller** creates and manages PodGroups for all deployment scenarios:
 
@@ -581,7 +581,7 @@ spec:
             # ... decode config
 ```
 
-### Key Annotations for Volcano Gang Scheduling
+#### Key Annotations for Volcano Gang Scheduling
 
 | Annotation | Defined In | Purpose |
 |------------|------------|---------|
@@ -622,14 +622,12 @@ spec:
 | Independent scaling | Each role's replicas can be adjusted independently |
 | Code reuse | Leverages LWS instead of reimplementing pod management |
 
-### InferenceService Controller responsibilities
+#### InferenceService Controller responsibilities
 
 1. **Create PodGroup** - One per InferenceService, with `minTaskMember` for gang scheduling constraints
 2. **Create LWS per role** - Inject PodGroup annotations (`scheduling.k8s.io/group-name`, `volcano.sh/task-spec`) into pod templates
 3. **Update PodGroup** - Adjust `minTaskMember` when role replicas change
 4. **Aggregate status** - Monitor all LWS and PodGroup states, update InferenceService status
-
-## Design Details
 
 ### CRD Structure Overview
 
