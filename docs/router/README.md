@@ -5,12 +5,20 @@
 - [Motivation](#motivation)
   - [Goals](#goals)
   - [Non-Goals](#non-goals)
-- [User Stories](#user-stories-optional)  
+  - [User Stories](#user-stories)
+    - [Story 1: Prefix Cache Aware Routing](#story-1-prefix-cache-aware-routing)
+    - [Story 2: KV-Cache Utilization Based Load Balancing](#story-2-kv-cache-utilization-based-load-balancing)
+    - [Story 3: Disaggregated Prefill/Decode Architecture](#story-3-disaggregated-prefilldecode-architecture)
 - [Proposal](#proposal)
   - [Go Types](#go-types)
   - [Configuration Examples](#configuration-examples)
-  - [Strategy to EndpointPickerConfig Mapping](#strategy-to-endpointpickerconfig-mapping)
+    - [Example 1: Simple Strategy-based Configuration](#example-1-simple-strategy-based-configuration)
+    - [Example 2: Advanced Configuration with Custom EndpointPickerConfig](#example-2-advanced-configuration-with-custom-endpointpickerconfig)
+    - [Example 3: Disaggregated Prefill/Decode Architecture](#example-3-disaggregated-prefilldecode-architecture)
+- [Strategy to EndpointPickerConfig Mapping](#strategy-to-endpointpickerconfig-mapping)
 - [Implementation Phases](#implementation-phases)
+  - [Phase 1: Core Router Integration](#phase-1-core-router-integration)
+  - [Phase 2: Disaggregated Prefill/Decode Support](#phase-2-disaggregated-prefilldecode-support)
 <!-- /toc -->
 
 ## Summary
