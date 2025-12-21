@@ -365,10 +365,10 @@ Combines prefill/decode disaggregation with multi-node parallelism for maximum s
 │                                  InferenceService                                     │
 │                              name: deepseek-r1-disagg                                 │
 └─────────────────────────────────────────┬─────────────────────────────────────────────┘
-                                          │
+                        │
                           ┌───────────────┴───────────────┐
-                          │          Roles (2)            │
-                          └───────────────┬───────────────┘
+        │          Roles (2)            │
+        └───────────────┬───────────────┘
                         │
              ┌────────────────────────────┼────────────────────────────┐
              │                                                         │
@@ -408,10 +408,27 @@ Combines prefill/decode disaggregation with multi-node parallelism for maximum s
 
 The controller uses **LeaderWorkerSet (LWS)** for all deployments to provide unified workload management and gang scheduling support.
 
-| Configuration | LWS Size | Scheduler | Description |
-|---------------|----------|-----------|-------------|
-| `multinode` not set | `size: 1` | default | Single pod per replica |
-| `multinode.nodeCount >= 2` | `size: nodeCount` | volcano | Multi-node with gang scheduling |
+| Configuration | LWS Mode | LWS Size | Scheduler | Description |
+|---------------|----------|----------|-----------|-------------|
+| `multinode` not set | Normal | `size: 1` | default | Single pod per replica |
+| `multinode.nodeCount >= 2` (monolithic) | Per-replica | `size: nodeCount` | volcano | One LWS per replica for independent scheduling |
+| PD disaggregated | Normal | `size: nodeCount` | volcano | Shared PodGroup across prefill/decode roles |
+
+**LWS Modes:**
+
+| Mode | LWS Count | PodGroup Count | Use Case |
+|------|-----------|----------------|----------|
+| **Per-replica** | N per role (one per replica) | 1 shared | All gang scheduling scenarios (multi-node, PD disaggregated) |
+| **Normal** | 1 per role | 0 | Single-node without gang scheduling |
+
+**Labels injected by Controller:**
+
+| Label | Description |
+|-------|-------------|
+| `fusioninfer.io/service` | InferenceService name |
+| `fusioninfer.io/component-type` | Component type (worker/prefiller/decoder) |
+| `fusioninfer.io/role-name` | Role name from spec |
+| `fusioninfer.io/replica-index` | Replica index (only in per-replica mode) |
 
 **Example 1: Single-Node LWS**
 
@@ -439,22 +456,58 @@ spec:
 
 **Example 2: Multi-Node LWS with Gang Scheduling**
 
-For multi-node deployments, the **InferenceService Controller** creates a custom PodGroup and injects annotations into LWS pod templates. Set `schedulerName: volcano` in the pod spec.
+For multi-node deployments (`replicas: 2, nodeCount: 4`), the **InferenceService Controller** creates:
+- **1 shared PodGroup** with `minTaskMember` for each replica
+- **Separate LWS per replica** to enable fine-grained scheduling
+
+```
+InferenceService (replicas: 2, nodeCount: 4)
+    │
+    ├── PodGroup: deepseek-r1-inference (shared)
+    │   └── minTaskMember: {inference-0: 4, inference-1: 4}
+    │
+    ├── LWS: deepseek-r1-inference-inference-0
+    │   └── replicas: 1, size: 4, task-spec: inference-0
+    │
+    └── LWS: deepseek-r1-inference-inference-1
+        └── replicas: 1, size: 4, task-spec: inference-1
+```
+
+This allows partial deployment when cluster resources are limited (e.g., only one replica can be scheduled).
 
 ```yaml
-apiVersion: leaderworkerset.x-k8s.io/v1
-kind: LeaderWorkerSet
+# Shared PodGroup for the InferenceService
+apiVersion: scheduling.volcano.sh/v1beta1
+kind: PodGroup
 metadata:
   name: deepseek-r1-inference
 spec:
-  replicas: 2
+  minMember: 8                       # 4 + 4 = 8 pods total
+  minTaskMember:
+    inference-0: 4                   # All 4 pods in replica 0
+    inference-1: 4                   # All 4 pods in replica 1
+---
+# Per-replica LWS (Controller creates one for each replica)
+apiVersion: leaderworkerset.x-k8s.io/v1
+kind: LeaderWorkerSet
+metadata:
+  name: deepseek-r1-inference-inference-0  # {service}-{role}-{replica}
+  labels:
+    fusioninfer.io/service: deepseek-r1-inference
+    fusioninfer.io/component-type: worker
+    fusioninfer.io/role-name: inference
+    fusioninfer.io/replica-index: "0"
+spec:
+  replicas: 1                         # Always 1 in per-replica mode
   leaderWorkerTemplate:
-    size: 4                    # 4 pods per replica
+    size: 4                           # 4 pods per replica
     workerTemplate:
       metadata:
+        labels:
+          fusioninfer.io/replica-index: "0"
         annotations:
-          scheduling.k8s.io/group-name: deepseek-r1-inference  # Injected by Controller
-          volcano.sh/task-spec: worker                         # Injected by Controller
+          scheduling.k8s.io/group-name: deepseek-r1-inference  # Shared PodGroup
+          volcano.sh/task-spec: inference-0                    # Task: {roleName}-{replicaIndex}
       spec:
         schedulerName: volcano
         containers:
@@ -483,75 +536,97 @@ spec:
                 nvidia.com/gpu: "8"
 ```
 
+> **Note**: The `ray symmetric-run` command is automatically injected by the Controller for multi-node deployments. It wraps the original container command to enable distributed execution via Ray.
+
 ### Gang Scheduling Behavior
 
-The **InferenceService Controller** creates and manages PodGroups for all scenarios. Gang scheduling behavior depends on the `minTaskMember` configuration in the PodGroup.
+The **InferenceService Controller** creates a **single shared PodGroup** per InferenceService. The `minTaskMember` field uses keys in the format `{roleName}-{replicaIndex}` to enable fine-grained gang scheduling that ensures:
 
-**Monolithic (Story 3):** Controller creates a PodGroup per LWS replica. Each replica's pods are scheduled atomically, but different replicas are scheduled independently.
+1. **Intra-replica atomicity**: All pods within a single replica are scheduled together (all-or-nothing)
+2. **Cross-role coordination** (for PD disaggregated): At least one prefill AND one decode replica must be scheduled together
 
-| Cluster GPUs | Replica-0 (32 GPUs) | Replica-1 (32 GPUs) | Capacity |
-|--------------|---------------------|---------------------|----------|
-| 64 GPUs | ✅ Scheduled | ✅ Scheduled | 100% |
-| 48 GPUs | ✅ Scheduled | ⏳ Pending | 50% |
-| 24 GPUs | ⏳ Pending | ⏳ Pending | 0% |
+| Scenario | LWS Count | PodGroup Count | minTaskMember Keys |
+|----------|-----------|----------------|--------------------|
+| Monolithic (single-node) | 1 per replica | 0 | N/A (no gang scheduling) |
+| Monolithic (multi-node) | 1 per replica | 1 shared | `{role}-0`, `{role}-1`, ... |
+| PD disaggregated | 1 per replica | 1 shared | `prefill-0`, `decode-0`, `decode-1`, ... |
 
-**PD Disaggregated (Story 4):** With custom PodGroup (`minTaskMember: {prefill: 1, decode: 1}`), Volcano ensures at least 1 prefill AND 1 decode are scheduled together.
+**Example: PD Disaggregated Multi-Node (Story 4)**
 
-Example: `prefill (1×2 nodes=16 GPUs)` + `decode (2×4 nodes=64 GPUs)` = 80 GPUs total
-
-| Cluster GPUs | Prefill (16 GPUs) | Decode-0 (32 GPUs) | Decode-1 (32 GPUs) | Service Status |
-|--------------|-------------------|--------------------|--------------------|----------------|
-| 80 GPUs | ✅ | ✅ | ✅ | Full capacity |
-| 64 GPUs | ✅ | ✅ | ⏳ | Partial (1P + 1D) |
-| 48 GPUs | ✅ | ✅ | ⏳ | Partial (1P + 1D) |
-| 32 GPUs | ⏳ | ⏳ | ⏳ | ❌ Blocked (can't satisfy 1P + 1D together) |
-| 16 GPUs | ⏳ | ⏳ | ⏳ | ❌ Blocked (only enough for prefill) |
-| 0 GPUs | ⏳ | ⏳ | ⏳ | Service unavailable |
-
-> **Note**: With `minTaskMember: {prefill: 1, decode: 1}`, Volcano blocks scheduling unless **both** prefill (16 GPUs) AND decode (32 GPUs) can be satisfied simultaneously (requires ≥48 GPUs).
-
-#### PodGroup Management
-
-The **InferenceService Controller** creates and manages PodGroups for all deployment scenarios:
-
-- **Monolithic**: One PodGroup per LWS replica (intra-replica gang scheduling)
-- **PD Disaggregated**: One PodGroup spanning all roles (cross-role gang scheduling)
-
-For PD disaggregated scenarios, the Controller creates a PodGroup that ensures prefill and decode are scheduled together:
+For `prefill (1 replica × 2 nodes)` + `decode (2 replicas × 4 nodes)`:
 
 ```yaml
-# InferenceService Controller creates this PodGroup
+# Single PodGroup for the entire InferenceService
 apiVersion: scheduling.volcano.sh/v1beta1
 kind: PodGroup
 metadata:
-  name: qwen3-inference              # Shared by all roles
-  namespace: default
+  name: deepseek-r1-disagg
 spec:
-  minMember: 2                       # At least 1 prefill + 1 decode
-  minTaskMember:                     # Matched by pod annotation: volcano.sh/task-spec
-    prefill: 1                       # Pods with annotation "volcano.sh/task-spec: prefill"
-    decode: 1                        # Pods with annotation "volcano.sh/task-spec: decode"
-  minResources:
-    nvidia.com/gpu: "16"
+  minMember: 10              # 2 + 4 + 4 = 10 pods total
+  minTaskMember:
+    prefill-0: 2             # All 2 pods in prefill replica-0
+    decode-0: 4              # All 4 pods in decode replica-0
+    decode-1: 4              # All 4 pods in decode replica-1
 ```
 
-Each LWS pod template includes **two annotations** to join this PodGroup:
+**Scheduling Behavior Table:**
+
+| Cluster GPUs | prefill-0 (16 GPUs) | decode-0 (32 GPUs) | decode-1 (32 GPUs) | Service Status |
+|--------------|---------------------|--------------------|--------------------|----------------|
+| 80 GPUs | ✅ | ✅ | ✅ | Full capacity |
+| 64 GPUs | ✅ | ✅ | ⏳ | Partial (1P + 1D) |
+| 48 GPUs | ✅ | ✅ | ⏳ | Partial (1P + 1D) |
+| 32 GPUs | ⏳ | ⏳ | ⏳ | ❌ Blocked (can't satisfy 1P + 1D atomically) |
+| 16 GPUs | ⏳ | ⏳ | ⏳ | ❌ Blocked (only enough for prefill) |
+
+> **Note**: Volcano ensures each task's pods are scheduled atomically. With `minTaskMember`, the scheduler blocks until **all** pods within each task can be scheduled together, preventing partial deployments within a replica.
+
+#### PodGroup Management
+
+The **InferenceService Controller** creates **one PodGroup per InferenceService**. The `minTaskMember` keys use the format `{roleName}-{replicaIndex}` to identify each replica's task:
 
 ```yaml
-# Prefill LWS (created by InferenceService Controller)
+# PodGroup for PD disaggregated: prefill (2 replicas × 1 node) + decode (4 replicas × 1 node)
+apiVersion: scheduling.volcano.sh/v1beta1
+kind: PodGroup
+metadata:
+  name: qwen3-inference              # Named after InferenceService
+  namespace: default
+spec:
+  minMember: 6                       # 2 + 4 = 6 pods
+  minTaskMember:                     # Matched by pod annotation: volcano.sh/task-spec
+    prefill-0: 1                     # Pods with annotation "volcano.sh/task-spec: prefill-0"
+    prefill-1: 1                     # Pods with annotation "volcano.sh/task-spec: prefill-1"
+    decode-0: 1                      # Pods with annotation "volcano.sh/task-spec: decode-0"
+    decode-1: 1                      # ... and so on
+    decode-2: 1
+    decode-3: 1
+```
+
+Each LWS is created per-replica with annotations to join the shared PodGroup:
+
+```yaml
+# Prefill LWS for replica 0 (Controller creates one LWS per replica)
 apiVersion: leaderworkerset.x-k8s.io/v1
 kind: LeaderWorkerSet
 metadata:
-  name: qwen3-prefill
+  name: qwen3-inference-prefill-0    # {service}-{role}-{replica}
+  labels:
+    fusioninfer.io/service: qwen3-inference
+    fusioninfer.io/component-type: prefiller
+    fusioninfer.io/role-name: prefill
+    fusioninfer.io/replica-index: "0"
 spec:
-  replicas: 2
+  replicas: 1                        # Always 1 in per-replica mode
   leaderWorkerTemplate:
-    size: 1
+    size: 1                          # 1 pod per replica (single-node)
     workerTemplate:
       metadata:
+        labels:
+          fusioninfer.io/replica-index: "0"
         annotations:
-          scheduling.k8s.io/group-name: qwen3-inference  # Join shared PodGroup
-          volcano.sh/task-spec: prefill                  # Task identifier
+          scheduling.k8s.io/group-name: qwen3-inference   # Join shared PodGroup
+          volcano.sh/task-spec: prefill-0                 # Task: {roleName}-{replicaIndex}
       spec:
         schedulerName: volcano
         containers:
@@ -559,20 +634,27 @@ spec:
             image: vllm/vllm-openai:v0.8.5
             # ... prefill config
 ---
-# Decode LWS (created by InferenceService Controller)
+# Decode LWS for replica 0
 apiVersion: leaderworkerset.x-k8s.io/v1
 kind: LeaderWorkerSet
 metadata:
-  name: qwen3-decode
+  name: qwen3-inference-decode-0
+  labels:
+    fusioninfer.io/service: qwen3-inference
+    fusioninfer.io/component-type: decoder
+    fusioninfer.io/role-name: decode
+    fusioninfer.io/replica-index: "0"
 spec:
-  replicas: 4
+  replicas: 1
   leaderWorkerTemplate:
     size: 1
     workerTemplate:
       metadata:
+        labels:
+          fusioninfer.io/replica-index: "0"
         annotations:
-          scheduling.k8s.io/group-name: qwen3-inference  # Join shared PodGroup
-          volcano.sh/task-spec: decode                   # Task identifier
+          scheduling.k8s.io/group-name: qwen3-inference
+          volcano.sh/task-spec: decode-0
       spec:
         schedulerName: volcano
         containers:
@@ -588,6 +670,8 @@ spec:
 | `scheduling.k8s.io/group-name` | `volcano.sh/apis/pkg/apis/scheduling/v1beta1` | Identifies which PodGroup the pod belongs to |
 | `volcano.sh/task-spec` | `volcano.sh/apis/pkg/apis/batch/v1alpha1` | Identifies which task within the PodGroup (matches `minTaskMember` keys) |
 
+**Task-spec format:** `{roleName}-{replicaIndex}` (e.g., `prefill-0`, `decode-1`)
+
 **How Volcano Scheduler uses these annotations:**
 
 ```
@@ -595,7 +679,7 @@ spec:
 │                         Pod Annotations                          │
 │                                                                  │
 │  scheduling.k8s.io/group-name: qwen3-inference                  │
-│  volcano.sh/task-spec: prefill                                   │
+│  volcano.sh/task-spec: prefill-0                                 │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -605,7 +689,7 @@ spec:
 │  1. getJobID() → Find PodGroup by group-name annotation          │
 │  2. getTaskName() → Get task name from task-spec annotation      │
 │  3. Check PodGroup.spec.minTaskMember[taskName] >= required      │
-│  4. Gang schedule only if ALL tasks meet minTaskMember           │
+│  4. Gang schedule only if ALL pods in task meet minTaskMember    │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -618,14 +702,14 @@ spec:
 | Aspect | Solution |
 |--------|----------|
 | Pod lifecycle | LWS manages (failure recovery, env injection, multi-node coordination) |
-| Gang scheduling | Controller-managed PodGroup for both intra-replica and cross-role scenarios |
-| Independent scaling | Each role's replicas can be adjusted independently |
+| Gang scheduling | Single shared PodGroup with `{roleName}-{replicaIndex}` keys ensures both intra-replica atomicity and cross-role coordination |
+| Independent scaling | Each replica can be scheduled independently when resources allow |
 | Code reuse | Leverages LWS instead of reimplementing pod management |
 
 #### InferenceService Controller responsibilities
 
-1. **Create PodGroup** - One per InferenceService, with `minTaskMember` for gang scheduling constraints
-2. **Create LWS per role** - Inject PodGroup annotations (`scheduling.k8s.io/group-name`, `volcano.sh/task-spec`) into pod templates
+1. **Create PodGroup** - One per InferenceService, with `minTaskMember` keys in format `{roleName}-{replicaIndex}`
+2. **Create LWS per replica** - One LWS per replica with annotations (`scheduling.k8s.io/group-name`, `volcano.sh/task-spec: {roleName}-{replicaIndex}`)
 3. **Update PodGroup** - Adjust `minTaskMember` when role replicas change
 4. **Aggregate status** - Monitor all LWS and PodGroup states, update InferenceService status
 

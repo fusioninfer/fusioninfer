@@ -1,121 +1,280 @@
-# fusioninfer
-// TODO(user): Add simple overview of use/purpose
+# FusionInfer
+
+A Kubernetes controller for unified LLM inference orchestration, supporting both monolithic and prefill/decode (PD) disaggregated serving topologies.
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+
+FusionInfer provides a single `InferenceService` CRD that enables:
+
+- **Monolithic deployment**: Single-pod inference handling full request lifecycle
+- **PD disaggregated deployment**: Separate prefill and decode roles for better GPU utilization
+- **Multi-node deployment**: Distributed inference across multiple nodes using tensor parallelism
+- **Gang scheduling**: Atomic scheduling via Volcano PodGroup integration
+- **Intelligent routing**: Gateway API integration with EPP (Endpoint Picker) for request scheduling
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      InferenceService CRD                        │
+│   (roles: worker/prefiller/decoder, replicas, multinode)        │
+└─────────────────────────────────┬───────────────────────────────┘
+                                  │
+                    ┌─────────────┴─────────────┐
+                    │  InferenceService Controller │
+                    └─────────────┬─────────────┘
+                                  │
+        ┌─────────────────────────┼─────────────────────────┐
+        │                         │                         │
+        ▼                         ▼                         ▼
+┌───────────────┐       ┌─────────────────┐       ┌─────────────────┐
+│   PodGroup    │       │ LeaderWorkerSet │       │  Router (EPP)   │
+│  (Volcano)    │       │     (LWS)       │       │  InferencePool  │
+│               │       │                 │       │  HTTPRoute      │
+└───────────────┘       └─────────────────┘       └─────────────────┘
+```
 
 ## Getting Started
 
 ### Prerequisites
-- go version v1.24.0+
-- docker version 17.03+.
-- kubectl version v1.11.3+.
-- Access to a Kubernetes v1.11.3+ cluster.
 
-### To Deploy on the cluster
-**Build and push your image to the location specified by `IMG`:**
+- Go version v1.24.0+
+- Docker version 17.03+
+- kubectl version v1.11.3+
+- Access to a Kubernetes v1.11.3+ cluster
 
-```sh
+### Install Dependencies
+
+FusionInfer requires the following components:
+
+**1. LeaderWorkerSet (LWS)** - For multi-node workload management
+
+```bash
+kubectl create -f https://github.com/kubernetes-sigs/lws/releases/download/v0.7.0/manifests.yaml
+```
+
+> Source: [LWS Installation Guide](https://lws.sigs.k8s.io/docs/installation/) | [Releases](https://github.com/kubernetes-sigs/lws/releases)
+
+**2. Volcano** - For gang scheduling
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.13.1/installer/volcano-development.yaml
+```
+
+> Source: [Volcano Installation Guide](https://volcano.sh/en/docs/installation/) | [Releases](https://github.com/volcano-sh/volcano/releases)
+
+**3. Gateway API** - For service routing
+
+```bash
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.1/standard-install.yaml
+```
+
+> Source: [Gateway API Installation Guide](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) | [Releases](https://github.com/kubernetes-sigs/gateway-api/releases)
+
+**4. Gateway API Inference Extension** - For intelligent inference request routing
+
+```bash
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.2.1/manifests.yaml
+```
+
+> Source: [Inference Extension Docs](https://gateway-api-inference-extension.sigs.k8s.io/) | [Releases](https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases)
+
+### Install the Gateway
+
+Set the Kgateway version and install the Kgateway CRDs:
+
+```bash
+KGTW_VERSION=v2.1.0
+helm upgrade -i --create-namespace --namespace kgateway-system --version $KGTW_VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
+```
+
+Install Kgateway:
+
+```bash
+helm upgrade -i --namespace kgateway-system --version $KGTW_VERSION kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set inferenceExtension.enabled=true
+```
+
+Deploy the Inference Gateway:
+
+```bash
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/gateway.yaml
+```
+
+### Quick Start (Local Development)
+
+```bash
+# 1. Create a kind cluster (optional)
+kind create cluster --name fusioninfer
+
+# 2. Install dependencies (see above)
+
+# 3. Install FusionInfer CRDs
+make install
+
+# 4. Run the controller locally
+make run
+```
+
+### Deploy to Cluster
+
+**Build and push your image:**
+
+```bash
 make docker-build docker-push IMG=<some-registry>/fusioninfer:tag
 ```
 
-**NOTE:** This image ought to be published in the personal registry you specified.
-And it is required to have access to pull the image from the working environment.
-Make sure you have the proper permission to the registry if the above commands don’t work.
+**Deploy the controller:**
 
-**Install the CRDs into the cluster:**
-
-```sh
-make install
-```
-
-**Deploy the Manager to the cluster with the image specified by `IMG`:**
-
-```sh
+```bash
 make deploy IMG=<some-registry>/fusioninfer:tag
 ```
 
-> **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
-privileges or be logged in as admin.
+**Apply sample resources:**
 
-**Create instances of your solution**
-You can apply the samples (examples) from the config/sample:
-
-```sh
+```bash
 kubectl apply -k config/samples/
 ```
 
->**NOTE**: Ensure that the samples has default values to test it out.
+### Uninstall
 
-### To Uninstall
-**Delete the instances (CRs) from the cluster:**
-
-```sh
+```bash
+# Delete sample resources
 kubectl delete -k config/samples/
-```
 
-**Delete the APIs(CRDs) from the cluster:**
-
-```sh
+# Uninstall CRDs
 make uninstall
-```
 
-**UnDeploy the controller from the cluster:**
-
-```sh
+# Undeploy controller
 make undeploy
 ```
 
-## Project Distribution
+## Usage Examples
 
-Following the options to release and provide this solution to the users.
+### Monolithic LLM Service
 
-### By providing a bundle with all YAML files
-
-1. Build the installer for the image built and published in the registry:
-
-```sh
-make build-installer IMG=<some-registry>/fusioninfer:tag
+```yaml
+apiVersion: fusioninfer.io/v1alpha1
+kind: InferenceService
+metadata:
+  name: qwen-inference
+spec:
+  roles:
+    - name: router
+      componentType: router
+      strategy: prefix-cache
+      httproute:
+        parentRefs:
+          - name: inference-gateway
+    - name: inference
+      componentType: worker
+      replicas: 1
+      template:
+        spec:
+          containers:
+            - name: vllm
+              image: vllm/vllm-openai:v0.11.0
+              args: ["--model", "Qwen/Qwen3-8B"]
+              resources:
+                limits:
+                  nvidia.com/gpu: "1"
 ```
 
-**NOTE:** The makefile target mentioned above generates an 'install.yaml'
-file in the dist directory. This file contains all the resources built
-with Kustomize, which are necessary to install this project without its
-dependencies.
+### PD Disaggregated Service
 
-2. Using the installer
-
-Users can just run 'kubectl apply -f <URL for YAML BUNDLE>' to install
-the project, i.e.:
-
-```sh
-kubectl apply -f https://raw.githubusercontent.com/<org>/fusioninfer/<tag or branch>/dist/install.yaml
+```yaml
+apiVersion: fusioninfer.io/v1alpha1
+kind: InferenceService
+metadata:
+  name: qwen-pd-service
+spec:
+  roles:
+    - name: router
+      componentType: router
+      strategy: pd-disaggregation
+      httproute:
+        parentRefs:
+          - name: inference-gateway
+    - name: prefill
+      componentType: prefiller
+      replicas: 2
+      template:
+        spec:
+          containers:
+            - name: vllm
+              image: vllm/vllm-openai:v0.11.0
+              args:
+                - "--model"
+                - "Qwen/Qwen3-8B"
+                - "--kv-transfer-config"
+                - '{"kv_connector":"PyNcclConnector","kv_role":"kv_producer"}'
+    - name: decode
+      componentType: decoder
+      replicas: 4
+      template:
+        spec:
+          containers:
+            - name: vllm
+              image: vllm/vllm-openai:v0.11.0
+              args:
+                - "--model"
+                - "Qwen/Qwen3-8B"
+                - "--kv-transfer-config"
+                - '{"kv_connector":"PyNcclConnector","kv_role":"kv_consumer"}'
 ```
 
-### By providing a Helm Chart
+### Multi-Node Inference
 
-1. Build the chart using the optional helm plugin
-
-```sh
-kubebuilder edit --plugins=helm/v1-alpha
+```yaml
+apiVersion: fusioninfer.io/v1alpha1
+kind: InferenceService
+metadata:
+  name: deepseek-r1
+spec:
+  roles:
+    - name: inference
+      componentType: worker
+      replicas: 2
+      multinode:
+        nodeCount: 4
+      template:
+        spec:
+          containers:
+            - name: vllm
+              image: vllm/vllm-openai:v0.11.0
+              args:
+                - "--model"
+                - "deepseek-ai/DeepSeek-R1"
+                - "--tensor-parallel-size"
+                - "32"
+              resources:
+                limits:
+                  nvidia.com/gpu: "8"
 ```
 
-2. See that a chart was generated under 'dist/chart', and users
-can obtain this solution from there.
+## Documentation
 
-**NOTE:** If you change the project, you need to update the Helm Chart
-using the same command above to sync the latest changes. Furthermore,
-if you create webhooks, you need to use the above command with
-the '--force' flag and manually ensure that any custom configuration
-previously added to 'dist/chart/values.yaml' or 'dist/chart/manager/manager.yaml'
-is manually re-applied afterwards.
+- [Core Design](docs/core-design/README.md) - InferenceService CRD design and gang scheduling
+- [Router](docs/router/README.md) - Gateway API integration and EPP configuration
+- [Model Loader](docs/model-loader/README.md) - Model loading utilities
 
-## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
+## Development
 
-**NOTE:** Run `make help` for more information on all potential `make` targets
+```bash
+# Run tests
+make test
 
-More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
+# Run e2e tests
+make test-e2e
+
+# Run linter
+make lint
+
+# Generate manifests
+make manifests
+
+# Generate code
+make generate
+```
 
 ## License
 
@@ -132,4 +291,3 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-

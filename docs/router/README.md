@@ -15,7 +15,7 @@
     - [Example 1: Simple Strategy-based Configuration](#example-1-simple-strategy-based-configuration)
     - [Example 2: Advanced Configuration with Custom EndpointPickerConfig](#example-2-advanced-configuration-with-custom-endpointpickerconfig)
     - [Example 3: Disaggregated Prefill/Decode Architecture](#example-3-disaggregated-prefilldecode-architecture)
-- [Strategy to EndpointPickerConfig Mapping](#strategy-to-endpointpickerconfig-mapping)
+  - [Strategy to EndpointPickerConfig Mapping](#strategy-to-endpointpickerconfig-mapping)
 - [Implementation Phases](#implementation-phases)
   - [Phase 1: Core Router Integration](#phase-1-core-router-integration)
   - [Phase 2: Disaggregated Prefill/Decode Support](#phase-2-disaggregated-prefilldecode-support)
@@ -68,7 +68,7 @@ spec:
         - "qwen.example.com"
     - name: inference
       componentType: worker
-      replica: 3
+      replicas: 3
       template:
         spec:
           containers:
@@ -102,7 +102,7 @@ spec:
         - "api.balanced.example.com"
     - name: inference
       componentType: worker
-      replica: 3
+      replicas: 3
       template:
         spec:
           containers:
@@ -137,7 +137,7 @@ spec:
     
     - name: prefill-servers
       componentType: prefiller
-      replica: 2
+      replicas: 2
       template:
         spec:
           containers:
@@ -148,7 +148,7 @@ spec:
                 - --kv-transfer-config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
     - name: decode-servers
       componentType: decoder
-      replica: 3
+      replicas: 3
       template:
         spec:
           containers:
@@ -194,7 +194,7 @@ type RoleSpec struct {
     EndpointPickerConfig  string                   `json:"endpointPickerConfig,omitempty"`  // Raw YAML for advanced users
     
     // Worker-specific fields (for prefiller/decoder/worker)
-    Replica        *int32                `json:"replica,omitempty"`
+    Replicas       *int32                `json:"replicas,omitempty"`
     Template       *corev1.PodTemplateSpec `json:"template,omitempty"`
 }
 
@@ -242,7 +242,7 @@ spec:
         - "api.example.com"
     - name: inference
       componentType: worker
-      replica: 3
+      replicas: 3
       template:
         spec:
           containers:
@@ -274,7 +274,7 @@ spec:
 
 ---
 # 2. InferencePool - Manages the inference backend pods
-apiVersion: inference.networking.x-k8s.io/v1alpha2
+apiVersion: inference.networking.x-k8s.io/v1
 kind: InferencePool
 metadata:
   name: my-service-pool
@@ -286,7 +286,6 @@ spec:
   targetPorts:
   - number: 8000
   endpointPickerRef:
-    kind: Service
     name: my-service-epp
     port:
       number: 9002
@@ -436,7 +435,7 @@ spec:
         - "advanced.example.com"
     - name: inference
       componentType: worker
-      replica: 5
+      replicas: 5
       template:
         spec:
           containers:
@@ -469,7 +468,7 @@ spec:
     
     - name: prefill-servers
       componentType: prefiller
-      replica: 2
+      replicas: 2
       template:
         spec:
           containers:
@@ -480,7 +479,7 @@ spec:
                 - --kv-transfer-config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
     - name: decode-servers
       componentType: decoder
-      replica: 2
+      replicas: 2
       template:
         spec:
           containers:
@@ -506,10 +505,9 @@ metadata:
 spec:
   selector:
     matchLabels:
-      app: disaggregated-llm-service
+      fusioninfer.io/service: disaggregated-llm-service
   endpointPickerRef:
     name: disaggregated-llm-service-epp
-    kind: Service
     port:
       number: 9002
   targetPorts:
@@ -530,13 +528,13 @@ spec:
   - type: by-label
     name: prefill-pods
     parameters:
-      label: "fusioninfer.io/component"
+      label: "fusioninfer.io/component-type"
       validValues: ["prefiller"]
   
   - type: by-label
     name: decode-pods
     parameters:
-      label: "fusioninfer.io/component"
+      label: "fusioninfer.io/component-type"
       validValues: ["decoder"]
   
   # Prefix cache optimization
@@ -725,12 +723,12 @@ plugins:
 - type: by-label
   name: prefill-pods
   parameters:
-    label: "fusioninfer.io/component"
+    label: "fusioninfer.io/component-type"
     validValues: ["prefiller"]
 - type: by-label
   name: decode-pods
   parameters:
-    label: "fusioninfer.io/component"
+    label: "fusioninfer.io/component-type"
     validValues: ["decoder"]
 - type: prefix-cache-scorer
   parameters:

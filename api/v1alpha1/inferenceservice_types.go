@@ -86,9 +86,9 @@ type Role struct {
 
 	// Worker-specific fields (for prefiller/decoder/worker)
 
-	// Replica defines the number of replicas for this component
+	// Replicas defines the number of replicas for this component
 	// +optional
-	Replica *int32 `json:"replica,omitempty"`
+	Replicas *int32 `json:"replicas,omitempty"`
 
 	// Multinode enables multi-node distributed inference
 	// +optional
@@ -126,14 +126,14 @@ const (
 )
 
 // ComponentStatus captures the aggregated runtime state of a single inference component (role).
-// For example, with replica=2 and multinode.nodeCount=4:
+// For example, with replicas=2 and multinode.nodeCount=4:
 //   - DesiredReplicas: 2
 //   - NodesPerReplica: 4
 //   - TotalPods: 8 (2 * 4)
 //   - ReadyReplicas: 0/1/2 (a replica is ready only when all its nodes are ready)
 //   - ReadyPods: 0-8
 type ComponentStatus struct {
-	// DesiredReplicas is the number of replicas requested (from spec.roles[].replica).
+	// DesiredReplicas is the number of replicas requested (from spec.roles[].replicas).
 	DesiredReplicas int32 `json:"desiredReplicas"`
 
 	// ReadyReplicas is the number of replicas that are fully ready.
