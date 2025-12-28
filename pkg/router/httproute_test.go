@@ -82,9 +82,6 @@ func TestBuildHTTPRoute(t *testing.T) {
 }
 
 func TestBuildHTTPRouteWithUserProvidedSpec(t *testing.T) {
-	hostname := gatewayv1.Hostname("api.example.com")
-	parentRefName := gatewayv1.ObjectName("my-gateway")
-
 	inferSvc := &fusioninferiov1alpha1.InferenceService{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-service",
@@ -95,43 +92,36 @@ func TestBuildHTTPRouteWithUserProvidedSpec(t *testing.T) {
 	role := fusioninferiov1alpha1.Role{
 		Name:          "router",
 		ComponentType: fusioninferiov1alpha1.ComponentTypeRouter,
-		HTTPRoute: &gatewayv1.HTTPRouteSpec{
-			CommonRouteSpec: gatewayv1.CommonRouteSpec{
-				ParentRefs: []gatewayv1.ParentReference{
-					{
-						Name: parentRefName,
-					},
-				},
-			},
-			Hostnames: []gatewayv1.Hostname{hostname},
-			Rules: []gatewayv1.HTTPRouteRule{
+		HTTPRoute: &fusioninferiov1alpha1.HTTPRouteConfig{
+			ParentRefs: []fusioninferiov1alpha1.ParentReference{
 				{
-					Matches: []gatewayv1.HTTPRouteMatch{
-						{
-							Path: &gatewayv1.HTTPPathMatch{
-								Type:  ptrTo(gatewayv1.PathMatchPathPrefix),
-								Value: ptrTo("/v1"),
-							},
-						},
-					},
+					Name:      "my-gateway",
+					Namespace: "gateway-ns",
 				},
 			},
+			Hostnames: []string{"api.example.com"},
 		},
 	}
 
 	httpRoute := BuildHTTPRoute(inferSvc, role)
 
 	// Verify hostname is preserved
-	if len(httpRoute.Spec.Hostnames) != 1 || httpRoute.Spec.Hostnames[0] != hostname {
-		t.Errorf("expected hostname %s to be preserved", hostname)
+	if len(httpRoute.Spec.Hostnames) != 1 || httpRoute.Spec.Hostnames[0] != "api.example.com" {
+		t.Errorf("expected hostname api.example.com to be preserved")
 	}
 
 	// Verify parent ref is preserved
-	if len(httpRoute.Spec.ParentRefs) != 1 || httpRoute.Spec.ParentRefs[0].Name != parentRefName {
-		t.Error("expected parent ref to be preserved")
+	if len(httpRoute.Spec.ParentRefs) != 1 {
+		t.Fatalf("expected 1 parent ref, got %d", len(httpRoute.Spec.ParentRefs))
+	}
+	if string(httpRoute.Spec.ParentRefs[0].Name) != "my-gateway" {
+		t.Error("expected parent ref name my-gateway")
+	}
+	if httpRoute.Spec.ParentRefs[0].Namespace == nil || string(*httpRoute.Spec.ParentRefs[0].Namespace) != "gateway-ns" {
+		t.Error("expected parent ref namespace gateway-ns")
 	}
 
-	// Verify backend ref is updated to InferencePool
+	// Verify backend ref is set to InferencePool
 	if len(httpRoute.Spec.Rules) != 1 {
 		t.Fatalf("expected 1 rule, got %d", len(httpRoute.Spec.Rules))
 	}
@@ -143,7 +133,7 @@ func TestBuildHTTPRouteWithUserProvidedSpec(t *testing.T) {
 	}
 }
 
-func TestBuildHTTPRouteWithMultipleRules(t *testing.T) {
+func TestBuildHTTPRouteWithSectionName(t *testing.T) {
 	inferSvc := &fusioninferiov1alpha1.InferenceService{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-service",
@@ -154,27 +144,11 @@ func TestBuildHTTPRouteWithMultipleRules(t *testing.T) {
 	role := fusioninferiov1alpha1.Role{
 		Name:          "router",
 		ComponentType: fusioninferiov1alpha1.ComponentTypeRouter,
-		HTTPRoute: &gatewayv1.HTTPRouteSpec{
-			Rules: []gatewayv1.HTTPRouteRule{
+		HTTPRoute: &fusioninferiov1alpha1.HTTPRouteConfig{
+			ParentRefs: []fusioninferiov1alpha1.ParentReference{
 				{
-					Matches: []gatewayv1.HTTPRouteMatch{
-						{
-							Path: &gatewayv1.HTTPPathMatch{
-								Type:  ptrTo(gatewayv1.PathMatchPathPrefix),
-								Value: ptrTo("/v1/chat"),
-							},
-						},
-					},
-				},
-				{
-					Matches: []gatewayv1.HTTPRouteMatch{
-						{
-							Path: &gatewayv1.HTTPPathMatch{
-								Type:  ptrTo(gatewayv1.PathMatchPathPrefix),
-								Value: ptrTo("/v1/completions"),
-							},
-						},
-					},
+					Name:        "my-gateway",
+					SectionName: "https",
 				},
 			},
 		},
@@ -182,25 +156,11 @@ func TestBuildHTTPRouteWithMultipleRules(t *testing.T) {
 
 	httpRoute := BuildHTTPRoute(inferSvc, role)
 
-	// Verify both rules have InferencePool backend
-	if len(httpRoute.Spec.Rules) != 2 {
-		t.Fatalf("expected 2 rules, got %d", len(httpRoute.Spec.Rules))
+	// Verify section name is preserved
+	if len(httpRoute.Spec.ParentRefs) != 1 {
+		t.Fatalf("expected 1 parent ref, got %d", len(httpRoute.Spec.ParentRefs))
 	}
-
-	expectedPoolName := "test-service-pool"
-	for i, rule := range httpRoute.Spec.Rules {
-		if len(rule.BackendRefs) != 1 {
-			t.Errorf("rule %d: expected 1 backend ref, got %d", i, len(rule.BackendRefs))
-			continue
-		}
-		if string(rule.BackendRefs[0].BackendRef.Name) != expectedPoolName {
-			t.Errorf("rule %d: expected pool name %s, got %s", i, expectedPoolName, rule.BackendRefs[0].BackendRef.Name)
-		}
+	if httpRoute.Spec.ParentRefs[0].SectionName == nil || string(*httpRoute.Spec.ParentRefs[0].SectionName) != "https" {
+		t.Error("expected section name https")
 	}
 }
-
-// helper function
-func ptrTo[T any](v T) *T {
-	return &v
-}
-

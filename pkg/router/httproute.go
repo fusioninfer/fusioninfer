@@ -46,46 +46,47 @@ func BuildHTTPRoute(inferSvc *fusioninferiov1alpha1.InferenceService, role fusio
 		Spec: gatewayv1.HTTPRouteSpec{},
 	}
 
-	// Copy user-provided HTTPRoute spec if available
+	// Convert our simplified HTTPRouteConfig to Gateway API types
 	if role.HTTPRoute != nil {
-		httpRoute.Spec = *role.HTTPRoute.DeepCopy()
+		// Convert ParentRefs
+		if len(role.HTTPRoute.ParentRefs) > 0 {
+			parentRefs := make([]gatewayv1.ParentReference, len(role.HTTPRoute.ParentRefs))
+			for i, ref := range role.HTTPRoute.ParentRefs {
+				parentRefs[i] = gatewayv1.ParentReference{
+					Name: gatewayv1.ObjectName(ref.Name),
+				}
+				if ref.Namespace != "" {
+					ns := gatewayv1.Namespace(ref.Namespace)
+					parentRefs[i].Namespace = &ns
+				}
+				if ref.SectionName != "" {
+					sn := gatewayv1.SectionName(ref.SectionName)
+					parentRefs[i].SectionName = &sn
+				}
+			}
+			httpRoute.Spec.ParentRefs = parentRefs
+		}
+
+		// Convert Hostnames
+		if len(role.HTTPRoute.Hostnames) > 0 {
+			hostnames := make([]gatewayv1.Hostname, len(role.HTTPRoute.Hostnames))
+			for i, h := range role.HTTPRoute.Hostnames {
+				hostnames[i] = gatewayv1.Hostname(h)
+			}
+			httpRoute.Spec.Hostnames = hostnames
+		}
 	}
 
-	// Ensure backend refs point to our InferencePool
-	httpRoute.Spec.Rules = ensureInferencePoolBackendRef(httpRoute.Spec.Rules, poolName)
+	// Always add the InferencePool backend rule
+	httpRoute.Spec.Rules = []gatewayv1.HTTPRouteRule{
+		{
+			BackendRefs: []gatewayv1.HTTPBackendRef{
+				buildInferencePoolBackendRef(poolName),
+			},
+		},
+	}
 
 	return httpRoute
-}
-
-// ensureInferencePoolBackendRef ensures HTTPRoute rules have backend refs pointing to the InferencePool
-func ensureInferencePoolBackendRef(rules []gatewayv1.HTTPRouteRule, poolName string) []gatewayv1.HTTPRouteRule {
-	if len(rules) == 0 {
-		// Create a default rule if none provided
-		rules = []gatewayv1.HTTPRouteRule{
-			{
-				BackendRefs: []gatewayv1.HTTPBackendRef{
-					buildInferencePoolBackendRef(poolName),
-				},
-			},
-		}
-		return rules
-	}
-
-	// Ensure each rule has the InferencePool backend ref
-	for i := range rules {
-		if len(rules[i].BackendRefs) == 0 {
-			rules[i].BackendRefs = []gatewayv1.HTTPBackendRef{
-				buildInferencePoolBackendRef(poolName),
-			}
-		} else {
-			// Update existing backend refs to point to InferencePool
-			for j := range rules[i].BackendRefs {
-				rules[i].BackendRefs[j] = buildInferencePoolBackendRef(poolName)
-			}
-		}
-	}
-
-	return rules
 }
 
 // buildInferencePoolBackendRef creates a backend ref pointing to an InferencePool
