@@ -22,6 +22,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -149,10 +150,13 @@ func (r *InferenceServiceReconciler) reconcilePodGroup(ctx context.Context, infe
 		return err
 	}
 
-	// Update if spec changed
-	existingPG.Spec = pg.Spec
-	log.V(1).Info("Updating PodGroup", "name", pg.Name)
-	return r.Update(ctx, existingPG)
+	// Update only if spec changed
+	if !equality.Semantic.DeepEqual(existingPG.Spec, pg.Spec) {
+		existingPG.Spec = pg.Spec
+		log.V(1).Info("Updating PodGroup", "name", pg.Name)
+		return r.Update(ctx, existingPG)
+	}
+	return nil
 }
 
 // reconcileLWS creates or updates the LeaderWorkerSet(s) for a role
@@ -205,12 +209,14 @@ func (r *InferenceServiceReconciler) reconcileLWS(ctx context.Context, inferSvc 
 			return err
 		}
 
-		// Update if spec changed
-		existingLWS.Spec = lws.Spec
-		existingLWS.Labels = lws.Labels
-		log.V(1).Info("Updating LWS", "name", lws.Name, "role", role.Name, "replica", i)
-		if err := r.Update(ctx, existingLWS); err != nil {
-			return err
+		// Update only if spec or labels changed
+		if !equality.Semantic.DeepEqual(existingLWS.Spec, lws.Spec) || !equality.Semantic.DeepEqual(existingLWS.Labels, lws.Labels) {
+			existingLWS.Spec = lws.Spec
+			existingLWS.Labels = lws.Labels
+			log.V(1).Info("Updating LWS", "name", lws.Name, "role", role.Name, "replica", i)
+			if err := r.Update(ctx, existingLWS); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -328,8 +334,11 @@ func (r *InferenceServiceReconciler) reconcileEPPConfigMap(ctx context.Context, 
 		return err
 	}
 
-	existing.Data = cm.Data
-	return r.Update(ctx, existing)
+	if !equality.Semantic.DeepEqual(existing.Data, cm.Data) {
+		existing.Data = cm.Data
+		return r.Update(ctx, existing)
+	}
+	return nil
 }
 
 func (r *InferenceServiceReconciler) reconcileEPPDeployment(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService) error {
@@ -348,8 +357,11 @@ func (r *InferenceServiceReconciler) reconcileEPPDeployment(ctx context.Context,
 		return err
 	}
 
-	existing.Spec = deploy.Spec
-	return r.Update(ctx, existing)
+	if !equality.Semantic.DeepEqual(existing.Spec, deploy.Spec) {
+		existing.Spec = deploy.Spec
+		return r.Update(ctx, existing)
+	}
+	return nil
 }
 
 func (r *InferenceServiceReconciler) reconcileEPPService(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService) error {
@@ -368,9 +380,12 @@ func (r *InferenceServiceReconciler) reconcileEPPService(ctx context.Context, in
 		return err
 	}
 
-	existing.Spec.Ports = svc.Spec.Ports
-	existing.Spec.Selector = svc.Spec.Selector
-	return r.Update(ctx, existing)
+	if !equality.Semantic.DeepEqual(existing.Spec.Ports, svc.Spec.Ports) || !equality.Semantic.DeepEqual(existing.Spec.Selector, svc.Spec.Selector) {
+		existing.Spec.Ports = svc.Spec.Ports
+		existing.Spec.Selector = svc.Spec.Selector
+		return r.Update(ctx, existing)
+	}
+	return nil
 }
 
 func (r *InferenceServiceReconciler) reconcileInferencePool(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService, workerRoles []fusioninferiov1alpha1.Role) error {
@@ -389,8 +404,11 @@ func (r *InferenceServiceReconciler) reconcileInferencePool(ctx context.Context,
 		return err
 	}
 
-	existing.Spec = pool.Spec
-	return r.Update(ctx, existing)
+	if !equality.Semantic.DeepEqual(existing.Spec, pool.Spec) {
+		existing.Spec = pool.Spec
+		return r.Update(ctx, existing)
+	}
+	return nil
 }
 
 func (r *InferenceServiceReconciler) reconcileHTTPRoute(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninferiov1alpha1.Role) error {
@@ -409,8 +427,11 @@ func (r *InferenceServiceReconciler) reconcileHTTPRoute(ctx context.Context, inf
 		return err
 	}
 
-	existing.Spec = httpRoute.Spec
-	return r.Update(ctx, existing)
+	if !equality.Semantic.DeepEqual(existing.Spec, httpRoute.Spec) {
+		existing.Spec = httpRoute.Spec
+		return r.Update(ctx, existing)
+	}
+	return nil
 }
 
 // updateStatus updates the InferenceService status based on LWS states
