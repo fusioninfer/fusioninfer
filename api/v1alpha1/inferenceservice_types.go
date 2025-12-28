@@ -19,7 +19,7 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // ComponentType defines the type of component in the inference pipeline
@@ -72,15 +72,17 @@ type Role struct {
 	// +optional
 	Strategy RoutingStrategy `json:"strategy,omitempty"`
 
-	// HTTPRoute defines the HTTPRoute spec for routing traffic
+	// HTTPRoute defines the HTTPRoute spec for routing traffic (Gateway API HTTPRouteSpec)
+	// Use runtime.RawExtension to avoid CRD size limits from Gateway API CEL validations
 	// +optional
 	// +kubebuilder:pruning:PreserveUnknownFields
-	HTTPRoute *gatewayv1.HTTPRouteSpec `json:"httproute,omitempty"`
+	HTTPRoute *runtime.RawExtension `json:"httproute,omitempty"`
 
-	// Gateway defines the Gateway spec for this router
+	// Gateway defines the Gateway spec for this router (Gateway API GatewaySpec)
+	// Use runtime.RawExtension to avoid CRD size limits from Gateway API CEL validations
 	// +optional
 	// +kubebuilder:pruning:PreserveUnknownFields
-	Gateway *gatewayv1.GatewaySpec `json:"gateway,omitempty"`
+	Gateway *runtime.RawExtension `json:"gateway,omitempty"`
 
 	// EndpointPickerConfig is raw YAML for advanced EndpointPickerConfig customization
 	// +optional

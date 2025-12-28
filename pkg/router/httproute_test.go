@@ -17,9 +17,11 @@ limitations under the License.
 package router
 
 import (
+	"encoding/json"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/v1alpha1"
@@ -90,18 +92,23 @@ func TestBuildHTTPRouteWithUserProvidedSpec(t *testing.T) {
 	}
 
 	ns := gatewayv1.Namespace("gateway-ns")
-	role := fusioninferiov1alpha1.Role{
-		Name:          "router",
-		ComponentType: fusioninferiov1alpha1.ComponentTypeRouter,
-		HTTPRoute: &gatewayv1.HTTPRouteSpec{
+	spec := gatewayv1.HTTPRouteSpec{
+		CommonRouteSpec: gatewayv1.CommonRouteSpec{
 			ParentRefs: []gatewayv1.ParentReference{
 				{
 					Name:      "my-gateway",
 					Namespace: &ns,
 				},
 			},
-			Hostnames: []gatewayv1.Hostname{"api.example.com"},
 		},
+		Hostnames: []gatewayv1.Hostname{"api.example.com"},
+	}
+	specBytes, _ := json.Marshal(spec)
+
+	role := fusioninferiov1alpha1.Role{
+		Name:          "router",
+		ComponentType: fusioninferiov1alpha1.ComponentTypeRouter,
+		HTTPRoute:     &runtime.RawExtension{Raw: specBytes},
 	}
 
 	httpRoute := BuildHTTPRoute(inferSvc, role)
@@ -143,10 +150,8 @@ func TestBuildHTTPRouteWithSectionName(t *testing.T) {
 	}
 
 	sectionName := gatewayv1.SectionName("https")
-	role := fusioninferiov1alpha1.Role{
-		Name:          "router",
-		ComponentType: fusioninferiov1alpha1.ComponentTypeRouter,
-		HTTPRoute: &gatewayv1.HTTPRouteSpec{
+	spec := gatewayv1.HTTPRouteSpec{
+		CommonRouteSpec: gatewayv1.CommonRouteSpec{
 			ParentRefs: []gatewayv1.ParentReference{
 				{
 					Name:        "my-gateway",
@@ -154,6 +159,13 @@ func TestBuildHTTPRouteWithSectionName(t *testing.T) {
 				},
 			},
 		},
+	}
+	specBytes, _ := json.Marshal(spec)
+
+	role := fusioninferiov1alpha1.Role{
+		Name:          "router",
+		ComponentType: fusioninferiov1alpha1.ComponentTypeRouter,
+		HTTPRoute:     &runtime.RawExtension{Raw: specBytes},
 	}
 
 	httpRoute := BuildHTTPRoute(inferSvc, role)
