@@ -290,13 +290,13 @@ func TestGetEPPImage(t *testing.T) {
 		}
 	})
 
-	// Test empty when env var is not set
-	t.Run("empty when env not set", func(t *testing.T) {
+	// Test default when env var is not set
+	t.Run("default when env not set", func(t *testing.T) {
 		os.Unsetenv(EnvEPPImage)
 
 		got := GetEPPImage()
-		if got != "" {
-			t.Errorf("GetEPPImage() = %s, want empty string", got)
+		if got != DefaultEPPImage {
+			t.Errorf("GetEPPImage() = %s, want %s", got, DefaultEPPImage)
 		}
 	})
 }

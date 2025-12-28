@@ -39,11 +39,17 @@ const (
 
 	// Environment variable name for EPP image
 	EnvEPPImage = "EPP_IMAGE"
+
+	// DefaultEPPImage is the default EPP image if EPP_IMAGE env is not set
+	DefaultEPPImage = "registry.k8s.io/gateway-api-inference-extension/epp:v1.2.1"
 )
 
-// GetEPPImage returns the EPP image from environment variable
+// GetEPPImage returns the EPP image from environment variable or default
 func GetEPPImage() string {
-	return os.Getenv(EnvEPPImage)
+	if image := os.Getenv(EnvEPPImage); image != "" {
+		return image
+	}
+	return DefaultEPPImage
 }
 
 // BuildEPPConfigMap constructs the ConfigMap containing EndpointPickerConfig
