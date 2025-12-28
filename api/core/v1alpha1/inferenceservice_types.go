@@ -17,9 +17,8 @@ limitations under the License.
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // ComponentType defines the type of component in the inference pipeline
@@ -72,13 +71,17 @@ type Role struct {
 	// +optional
 	Strategy RoutingStrategy `json:"strategy,omitempty"`
 
-	// HTTPRoute defines the HTTPRoute configuration for routing traffic
+	// HTTPRoute defines the HTTPRoute spec for routing traffic (Gateway API HTTPRouteSpec)
+	// Use runtime.RawExtension to avoid CRD size limits from Gateway API CEL validations
 	// +optional
-	HTTPRoute *gatewayv1.HTTPRouteSpec `json:"httproute,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	HTTPRoute *runtime.RawExtension `json:"httproute,omitempty"`
 
-	// Gateway defines the Gateway configuration
+	// Gateway defines the Gateway spec for this router (Gateway API GatewaySpec)
+	// Use runtime.RawExtension to avoid CRD size limits from Gateway API CEL validations
 	// +optional
-	Gateway *gatewayv1.GatewaySpec `json:"gateway,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	Gateway *runtime.RawExtension `json:"gateway,omitempty"`
 
 	// EndpointPickerConfig is raw YAML for advanced EndpointPickerConfig customization
 	// +optional
@@ -86,17 +89,19 @@ type Role struct {
 
 	// Worker-specific fields (for prefiller/decoder/worker)
 
-	// Replica defines the number of replicas for this component
+	// Replicas defines the number of replicas for this component
 	// +optional
-	Replica *int32 `json:"replica,omitempty"`
+	Replicas *int32 `json:"replicas,omitempty"`
 
 	// Multinode enables multi-node distributed inference
 	// +optional
 	Multinode *Multinode `json:"multinode,omitempty"`
 
-	// Template defines the pod spec for this component
+	// Template defines the pod spec for this component (corev1.PodTemplateSpec)
+	// Use runtime.RawExtension to avoid CRD size limits
 	// +optional
-	Template *corev1.PodTemplateSpec `json:"template,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	Template *runtime.RawExtension `json:"template,omitempty"`
 }
 
 // SchedulingStrategy defines pod-level scheduling behavior.
@@ -126,14 +131,14 @@ const (
 )
 
 // ComponentStatus captures the aggregated runtime state of a single inference component (role).
-// For example, with replica=2 and multinode.nodeCount=4:
+// For example, with replicas=2 and multinode.nodeCount=4:
 //   - DesiredReplicas: 2
 //   - NodesPerReplica: 4
 //   - TotalPods: 8 (2 * 4)
 //   - ReadyReplicas: 0/1/2 (a replica is ready only when all its nodes are ready)
 //   - ReadyPods: 0-8
 type ComponentStatus struct {
-	// DesiredReplicas is the number of replicas requested (from spec.roles[].replica).
+	// DesiredReplicas is the number of replicas requested (from spec.roles[].replicas).
 	DesiredReplicas int32 `json:"desiredReplicas"`
 
 	// ReadyReplicas is the number of replicas that are fully ready.
@@ -161,6 +166,10 @@ type ComponentStatus struct {
 
 // InferenceServiceStatus defines the observed state of InferenceService.
 type InferenceServiceStatus struct {
+	// ObservedGeneration is the most recent generation observed by the controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
 	// Conditions represent the latest available observations of the service's state.
 	// +listType=map
 	// +listMapKey=type
@@ -175,6 +184,7 @@ type InferenceServiceStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +genclient
 
 // InferenceService is the Schema for the inferenceservices API
 type InferenceService struct {

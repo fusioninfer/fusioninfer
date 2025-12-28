@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/v1alpha1"
+	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/core/v1alpha1"
 )
 
 // ModelLoaderReconciler reconciles a ModelLoader object
