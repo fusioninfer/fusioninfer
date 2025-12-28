@@ -1,0 +1,125 @@
+/**
+ * FusionInfer custom CSS theme
+ * Based on a modern blue/teal color palette representing fusion and AI
+ */
+
+:root {
+  /* Blue-teal primary color palette for light mode */
+  --ifm-color-primary: #0891b2; /* Cyan-600 */
+  --ifm-color-primary-dark: #0e7490; /* Cyan-700 */
+  --ifm-color-primary-darker: #155e75; /* Cyan-800 */
+  --ifm-color-primary-darkest: #164e63; /* Cyan-900 */
+  --ifm-color-primary-light: #06b6d4; /* Cyan-500 */
+  --ifm-color-primary-lighter: #22d3ee; /* Cyan-400 */
+  --ifm-color-primary-lightest: #67e8f9; /* Cyan-300 */
+
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+
+  --ifm-color-content: #1e293b; /* Slate-800 */
+  --ifm-color-content-secondary: #475569; /* Slate-600 */
+
+  --ifm-code-color: #0e7490;
+  --ifm-code-padding-vertical: 0.1rem;
+  --ifm-code-padding-horizontal: 0.3rem;
+}
+
+[data-theme='light'] {
+  .hero--primary {
+    --ifm-hero-background-color: #f8fafc;
+    --ifm-hero-text-color: var(--ifm-color-content);
+  }
+}
+
+/* Dark mode */
+[data-theme='dark'] {
+  --ifm-color-primary: #22d3ee; /* Cyan-400 */
+  --ifm-color-primary-dark: #06b6d4; /* Cyan-500 */
+  --ifm-color-primary-darker: #0891b2; /* Cyan-600 */
+  --ifm-color-primary-darkest: #0e7490; /* Cyan-700 */
+  --ifm-color-primary-light: #67e8f9; /* Cyan-300 */
+  --ifm-color-primary-lighter: #a5f3fc; /* Cyan-200 */
+  --ifm-color-primary-lightest: #cffafe; /* Cyan-100 */
+
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+
+  --ifm-background-color: #0f172a; /* Slate-900 */
+  --ifm-background-surface-color: #1e293b; /* Slate-800 */
+
+  --ifm-color-content: #f1f5f9; /* Slate-100 */
+  --ifm-color-content-secondary: #cbd5e1; /* Slate-300 */
+
+  --ifm-hover-overlay: #334155; /* Slate-700 */
+  --ifm-breadcrumb-item-background-active: #334155;
+
+  --ifm-link-color: var(--ifm-color-primary);
+  --ifm-link-hover-color: var(--ifm-color-primary-light);
+
+  --ifm-code-color: #67e8f9;
+
+  .hero--primary {
+    --ifm-hero-background-color: #0f172a;
+    --ifm-hero-text-color: var(--ifm-color-content);
+  }
+}
+
+/* Active menu styling */
+.menu__link.menu__link--active {
+  background-color: var(--ifm-hover-overlay);
+  color: var(--ifm-color-primary);
+}
+
+[data-theme='dark'] .menu__list-item-link {
+  color: var(--ifm-color-content);
+}
+
+[data-theme='dark'] .breadcrumbs__item--active .breadcrumbs__link {
+  color: var(--ifm-color-primary);
+}
+
+[data-theme='dark'] .menu__list-item-collapsible-icon {
+  color: var(--ifm-color-content-secondary);
+}
+
+/* Inline code styling */
+code:not([class*="language-"]) {
+  color: var(--ifm-code-color);
+}
+
+/* Mermaid diagram styling */
+.docusaurus-mermaid-container {
+  padding: 20px;
+}
+
+/* Hero section enhancements */
+.hero {
+  padding: 4rem 0;
+}
+
+.hero__title {
+  font-size: 3rem;
+  font-weight: 800;
+}
+
+.hero__subtitle {
+  font-size: 1.5rem;
+  opacity: 0.9;
+}
+
+/* Feature cards */
+.feature-card {
+  padding: 2rem;
+  border-radius: 12px;
+  background: var(--ifm-background-surface-color);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.feature-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='dark'] .feature-card:hover {
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
+}
+

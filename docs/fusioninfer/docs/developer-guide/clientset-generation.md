@@ -1,3 +1,8 @@
+---
+sidebar_position: 1
+title: Clientset Generation
+---
+
 # Clientset Generation
 
 FusionInfer uses `controller-runtime`'s `client.Client` for standard operations. For SharedInformers or integration with other Kubernetes components, use the generated typed clientset.
