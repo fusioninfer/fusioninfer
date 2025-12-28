@@ -22,6 +22,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
@@ -255,6 +256,83 @@ func BuildEPPServiceAccount(inferSvc *fusioninferiov1alpha1.InferenceService) *c
 			Labels: map[string]string{
 				workload.LabelService:  inferSvc.Name,
 				workload.LabelRevision: fmt.Sprintf("%d", inferSvc.Generation),
+			},
+		},
+	}
+}
+
+// BuildEPPRole constructs the Role for EPP with required permissions
+// Based on gateway-api-inference-extension Helm chart: config/charts/inferencepool/templates/rbac.yaml
+func BuildEPPRole(inferSvc *fusioninferiov1alpha1.InferenceService) *rbacv1.Role {
+	roleName := GenerateEPPDeploymentName(inferSvc.Name)
+
+	return &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      roleName,
+			Namespace: inferSvc.Namespace,
+			Labels: map[string]string{
+				workload.LabelService:  inferSvc.Name,
+				workload.LabelRevision: fmt.Sprintf("%d", inferSvc.Generation),
+			},
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				// EPP needs to watch/list pods for endpoint discovery
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				// EPP needs to watch/list InferencePools
+				APIGroups: []string{"inference.networking.k8s.io"},
+				Resources: []string{"inferencepools"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				// EPP needs to watch/list InferenceObjectives and InferenceModelRewrites
+				APIGroups: []string{"inference.networking.x-k8s.io"},
+				Resources: []string{"inferenceobjectives", "inferencemodelrewrites"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				// EPP needs to create/update leases for leader election (if enabled)
+				APIGroups: []string{"coordination.k8s.io"},
+				Resources: []string{"leases"},
+				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+			},
+			{
+				// EPP needs to create events
+				APIGroups: []string{""},
+				Resources: []string{"events"},
+				Verbs:     []string{"create", "patch"},
+			},
+		},
+	}
+}
+
+// BuildEPPRoleBinding constructs the RoleBinding for EPP
+func BuildEPPRoleBinding(inferSvc *fusioninferiov1alpha1.InferenceService) *rbacv1.RoleBinding {
+	name := GenerateEPPDeploymentName(inferSvc.Name)
+
+	return &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: inferSvc.Namespace,
+			Labels: map[string]string{
+				workload.LabelService:  inferSvc.Name,
+				workload.LabelRevision: fmt.Sprintf("%d", inferSvc.Generation),
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     name,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      name,
+				Namespace: inferSvc.Namespace,
 			},
 		},
 	}

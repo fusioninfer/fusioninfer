@@ -22,6 +22,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -56,6 +57,7 @@ type InferenceServiceReconciler struct {
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=inference.networking.x-k8s.io,resources=inferencepools,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -303,27 +305,37 @@ func (r *InferenceServiceReconciler) reconcileRouter(ctx context.Context, inferS
 		return fmt.Errorf("failed to reconcile EPP ServiceAccount: %w", err)
 	}
 
-	// 2. Create EPP ConfigMap
+	// 2. Create Role for EPP
+	if err := r.reconcileEPPRole(ctx, inferSvc); err != nil {
+		return fmt.Errorf("failed to reconcile EPP Role: %w", err)
+	}
+
+	// 3. Create RoleBinding for EPP
+	if err := r.reconcileEPPRoleBinding(ctx, inferSvc); err != nil {
+		return fmt.Errorf("failed to reconcile EPP RoleBinding: %w", err)
+	}
+
+	// 4. Create EPP ConfigMap
 	if err := r.reconcileEPPConfigMap(ctx, inferSvc, role); err != nil {
 		return fmt.Errorf("failed to reconcile EPP ConfigMap: %w", err)
 	}
 
-	// 3. Create EPP Deployment
+	// 5. Create EPP Deployment
 	if err := r.reconcileEPPDeployment(ctx, inferSvc); err != nil {
 		return fmt.Errorf("failed to reconcile EPP Deployment: %w", err)
 	}
 
-	// 4. Create EPP Service
+	// 6. Create EPP Service
 	if err := r.reconcileEPPService(ctx, inferSvc); err != nil {
 		return fmt.Errorf("failed to reconcile EPP Service: %w", err)
 	}
 
-	// 5. Create InferencePool
+	// 7. Create InferencePool
 	if err := r.reconcileInferencePool(ctx, inferSvc, workerRoles); err != nil {
 		return fmt.Errorf("failed to reconcile InferencePool: %w", err)
 	}
 
-	// 6. Create HTTPRoute
+	// 8. Create HTTPRoute
 	if err := r.reconcileHTTPRoute(ctx, inferSvc, role); err != nil {
 		return fmt.Errorf("failed to reconcile HTTPRoute: %w", err)
 	}
@@ -348,6 +360,57 @@ func (r *InferenceServiceReconciler) reconcileEPPServiceAccount(ctx context.Cont
 		return err
 	}
 	return nil // ServiceAccount doesn't need updates
+}
+
+func (r *InferenceServiceReconciler) reconcileEPPRole(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService) error {
+	role := router.BuildEPPRole(inferSvc)
+
+	if err := controllerutil.SetControllerReference(inferSvc, role, r.Scheme); err != nil {
+		return err
+	}
+
+	existing := &rbacv1.Role{}
+	err := r.Get(ctx, types.NamespacedName{Name: role.Name, Namespace: role.Namespace}, existing)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return r.Create(ctx, role)
+		}
+		return err
+	}
+
+	// Update only if revision changed
+	if existing.Labels[workload.LabelRevision] != role.Labels[workload.LabelRevision] {
+		existing.Labels = role.Labels
+		existing.Rules = role.Rules
+		return r.Update(ctx, existing)
+	}
+	return nil
+}
+
+func (r *InferenceServiceReconciler) reconcileEPPRoleBinding(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService) error {
+	rb := router.BuildEPPRoleBinding(inferSvc)
+
+	if err := controllerutil.SetControllerReference(inferSvc, rb, r.Scheme); err != nil {
+		return err
+	}
+
+	existing := &rbacv1.RoleBinding{}
+	err := r.Get(ctx, types.NamespacedName{Name: rb.Name, Namespace: rb.Namespace}, existing)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return r.Create(ctx, rb)
+		}
+		return err
+	}
+
+	// Update only if revision changed
+	if existing.Labels[workload.LabelRevision] != rb.Labels[workload.LabelRevision] {
+		existing.Labels = rb.Labels
+		existing.RoleRef = rb.RoleRef
+		existing.Subjects = rb.Subjects
+		return r.Update(ctx, existing)
+	}
+	return nil
 }
 
 func (r *InferenceServiceReconciler) reconcileEPPConfigMap(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninferiov1alpha1.Role) error {
@@ -580,6 +643,8 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&appsv1.Deployment{}).
+		Owns(&rbacv1.Role{}).
+		Owns(&rbacv1.RoleBinding{}).
 		Owns(&inferenceapi.InferencePool{}).
 		Owns(&gatewayv1.HTTPRoute{}).
 		Named("inferenceservice").
