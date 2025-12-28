@@ -17,11 +17,8 @@ limitations under the License.
 package controller
 
 import (
-	"context"
-
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/v1alpha1"
 )
@@ -39,8 +36,8 @@ const (
 	ReasonInferenceServiceFailed     = "InferenceServiceFailed"
 )
 
-// setInferenceServiceInitCondition sets InferenceService condition to initialized (first time only)
-func (r *InferenceServiceReconciler) setInferenceServiceInitCondition(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService) error {
+// setInitCondition sets InferenceService condition to initialized
+func setInitCondition(inferSvc *fusioninferiov1alpha1.InferenceService) {
 	meta.SetStatusCondition(&inferSvc.Status.Conditions, metav1.Condition{
 		Type:               ConditionTypeInitialized,
 		Status:             metav1.ConditionTrue,
@@ -49,15 +46,10 @@ func (r *InferenceServiceReconciler) setInferenceServiceInitCondition(ctx contex
 		LastTransitionTime: metav1.Now(),
 	})
 	inferSvc.Status.ObservedGeneration = inferSvc.Generation
-	if err := r.Status().Update(ctx, inferSvc); err != nil {
-		logf.FromContext(ctx).Error(err, "Failed to update InferenceService init condition")
-		return err
-	}
-	return nil
 }
 
-// setInferenceServiceProcessingCondition sets InferenceService condition to processing
-func (r *InferenceServiceReconciler) setInferenceServiceProcessingCondition(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService) error {
+// setProcessingCondition sets InferenceService condition to processing
+func setProcessingCondition(inferSvc *fusioninferiov1alpha1.InferenceService) {
 	meta.SetStatusCondition(&inferSvc.Status.Conditions, metav1.Condition{
 		Type:               ConditionTypeActive,
 		Status:             metav1.ConditionFalse,
@@ -66,15 +58,10 @@ func (r *InferenceServiceReconciler) setInferenceServiceProcessingCondition(ctx 
 		LastTransitionTime: metav1.Now(),
 	})
 	inferSvc.Status.ObservedGeneration = inferSvc.Generation
-	if err := r.Status().Update(ctx, inferSvc); err != nil {
-		logf.FromContext(ctx).Error(err, "Failed to update InferenceService processing condition")
-		return err
-	}
-	return nil
 }
 
-// setInferenceServiceFailedCondition sets InferenceService condition to failed
-func (r *InferenceServiceReconciler) setInferenceServiceFailedCondition(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService, err error) {
+// setFailedCondition sets InferenceService condition to failed
+func setFailedCondition(inferSvc *fusioninferiov1alpha1.InferenceService, err error) {
 	meta.SetStatusCondition(&inferSvc.Status.Conditions, metav1.Condition{
 		Type:               ConditionTypeFailed,
 		Status:             metav1.ConditionTrue,
@@ -82,13 +69,11 @@ func (r *InferenceServiceReconciler) setInferenceServiceFailedCondition(ctx cont
 		Message:            err.Error(),
 		LastTransitionTime: metav1.Now(),
 	})
-	if updateErr := r.Status().Update(ctx, inferSvc); updateErr != nil {
-		logf.FromContext(ctx).Error(updateErr, "Failed to update InferenceService failed condition")
-	}
+	inferSvc.Status.ObservedGeneration = inferSvc.Generation
 }
 
-// setInferenceServiceActiveCondition sets InferenceService condition to active (all components ready)
-func (r *InferenceServiceReconciler) setInferenceServiceActiveCondition(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService) error {
+// setActiveCondition sets InferenceService condition to active (all components ready)
+func setActiveCondition(inferSvc *fusioninferiov1alpha1.InferenceService) {
 	meta.SetStatusCondition(&inferSvc.Status.Conditions, metav1.Condition{
 		Type:               ConditionTypeActive,
 		Status:             metav1.ConditionTrue,
@@ -97,9 +82,4 @@ func (r *InferenceServiceReconciler) setInferenceServiceActiveCondition(ctx cont
 		LastTransitionTime: metav1.Now(),
 	})
 	inferSvc.Status.ObservedGeneration = inferSvc.Generation
-	if err := r.Status().Update(ctx, inferSvc); err != nil {
-		logf.FromContext(ctx).Error(err, "Failed to update InferenceService active condition")
-		return err
-	}
-	return nil
 }

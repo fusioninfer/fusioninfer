@@ -59,7 +59,7 @@ type InferenceServiceReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// Sets Processing at start, Failed on error, Active at end
+// Uses single status update at the end to avoid optimistic lock conflicts.
 func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
@@ -75,30 +75,29 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	log.Info("Reconciling InferenceService", "name", inferSvc.Name)
 
-	// 2. Set Init condition (first time only)
+	// Track if we need to update status (only update once at the end)
+	var reconcileErr error
+
+	// 2. Set Init condition (first time only) - no API call yet
 	if len(inferSvc.Status.Conditions) == 0 {
-		if err := r.setInferenceServiceInitCondition(ctx, inferSvc); err != nil {
-			return ctrl.Result{}, err
-		}
+		setInitCondition(inferSvc)
 	}
 
-	// 3. Set Processing condition
-	if err := r.setInferenceServiceProcessingCondition(ctx, inferSvc); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	// 4. Reconcile PodGroup for gang scheduling (must be created before LWS)
+	// 3. Reconcile PodGroup for gang scheduling (must be created before LWS)
 	if err := r.reconcilePodGroup(ctx, inferSvc); err != nil {
 		log.Error(err, "Failed to reconcile PodGroup")
-		r.setInferenceServiceFailedCondition(ctx, inferSvc, err)
-		return ctrl.Result{}, err
+		reconcileErr = err
 	}
 
-	// 5. Collect worker roles for router
+	// 4. Collect worker roles for router
 	var workerRoles []fusioninferiov1alpha1.Role
 
-	// 6. Reconcile workloads (LWS) for each role
+	// 5. Reconcile workloads (LWS) for each role
+RoleLoop:
 	for _, role := range inferSvc.Spec.Roles {
+		if reconcileErr != nil {
+			break
+		}
 		switch role.ComponentType {
 		case fusioninferiov1alpha1.ComponentTypeWorker,
 			fusioninferiov1alpha1.ComponentTypePrefiller,
@@ -106,38 +105,48 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			workerRoles = append(workerRoles, role)
 			if err := r.reconcileLWS(ctx, inferSvc, role); err != nil {
 				log.Error(err, "Failed to reconcile LWS", "role", role.Name)
-				r.setInferenceServiceFailedCondition(ctx, inferSvc, err)
-				return ctrl.Result{}, err
+				reconcileErr = err
+				break RoleLoop
 			}
-
 		case fusioninferiov1alpha1.ComponentTypeRouter:
 			// Router will be reconciled after worker roles are collected
 		}
 	}
 
-	// 7. Reconcile router components
-	for _, role := range inferSvc.Spec.Roles {
-		if role.ComponentType == fusioninferiov1alpha1.ComponentTypeRouter {
-			if err := r.reconcileRouter(ctx, inferSvc, role, workerRoles); err != nil {
-				log.Error(err, "Failed to reconcile Router", "role", role.Name)
-				r.setInferenceServiceFailedCondition(ctx, inferSvc, err)
-				return ctrl.Result{}, err
+	// 6. Reconcile router components
+	if reconcileErr == nil {
+		for _, role := range inferSvc.Spec.Roles {
+			if role.ComponentType == fusioninferiov1alpha1.ComponentTypeRouter {
+				if err := r.reconcileRouter(ctx, inferSvc, role, workerRoles); err != nil {
+					log.Error(err, "Failed to reconcile Router", "role", role.Name)
+					reconcileErr = err
+					break
+				}
 			}
 		}
 	}
 
-	// 8. Update component status and check readiness
-	if err := r.updateComponentStatus(ctx, inferSvc); err != nil {
-		log.Error(err, "Failed to update component status")
+	// 7. Update component status (in-memory, no API call yet)
+	r.updateComponentStatusInMemory(ctx, inferSvc)
+
+	// 8. Set final condition based on reconcile result
+	if reconcileErr != nil {
+		setFailedCondition(inferSvc, reconcileErr)
+	} else if r.checkAllComponentsReady(inferSvc) {
+		setActiveCondition(inferSvc)
+	} else {
+		setProcessingCondition(inferSvc)
+	}
+
+	// 9. Single status update at the end
+	if err := r.Status().Update(ctx, inferSvc); err != nil {
+		log.Error(err, "Failed to update InferenceService status")
 		return ctrl.Result{}, err
 	}
 
-	// 9. Set Active condition if all components are ready
-	allReady := r.checkAllComponentsReady(inferSvc)
-	if allReady {
-		if err := r.setInferenceServiceActiveCondition(ctx, inferSvc); err != nil {
-			return ctrl.Result{}, err
-		}
+	// Return reconcile error if any
+	if reconcileErr != nil {
+		return ctrl.Result{}, reconcileErr
 	}
 
 	return ctrl.Result{}, nil
@@ -382,10 +391,13 @@ func (r *InferenceServiceReconciler) reconcileEPPDeployment(ctx context.Context,
 		return err
 	}
 
-	// Update only if revision changed
+	// Update only if revision changed (only update mutable fields)
 	if existing.Labels[workload.LabelRevision] != deploy.Labels[workload.LabelRevision] {
 		existing.Labels = deploy.Labels
-		existing.Spec = deploy.Spec
+		// Don't update spec.selector as it's immutable
+		existing.Spec.Template = deploy.Spec.Template
+		existing.Spec.Replicas = deploy.Spec.Replicas
+		existing.Spec.Strategy = deploy.Spec.Strategy
 		return r.Update(ctx, existing)
 	}
 	return nil
@@ -467,9 +479,9 @@ func (r *InferenceServiceReconciler) reconcileHTTPRoute(ctx context.Context, inf
 	return nil
 }
 
-// updateComponentStatus updates the InferenceService component status based on LWS states
-// Note: This only updates component status, not conditions (conditions are updated via setXxxCondition functions)
-func (r *InferenceServiceReconciler) updateComponentStatus(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService) error {
+// updateComponentStatusInMemory updates the InferenceService component status in memory
+// Does NOT call Status().Update() - caller must update status
+func (r *InferenceServiceReconciler) updateComponentStatusInMemory(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService) {
 	log := logf.FromContext(ctx)
 
 	components := make(map[string]fusioninferiov1alpha1.ComponentStatus)
@@ -495,9 +507,7 @@ func (r *InferenceServiceReconciler) updateComponentStatus(ctx context.Context, 
 	}
 
 	inferSvc.Status.Components = components
-
-	log.V(1).Info("Updating InferenceService component status", "components", len(components))
-	return r.Status().Update(ctx, inferSvc)
+	log.V(1).Info("Updated InferenceService component status in memory", "components", len(components))
 }
 
 // checkAllComponentsReady checks if all components are in Running phase
