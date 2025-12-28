@@ -35,6 +35,12 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	// External APIs
+	inferenceapi "sigs.k8s.io/gateway-api-inference-extension/api/v1"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	lwsv1 "sigs.k8s.io/lws/api/leaderworkerset/v1"
+	schedulingv1beta1 "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
+
 	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/v1alpha1"
 	"github.com/fusioninfer/fusioninfer/pkg/controller"
 	// +kubebuilder:scaffold:imports
@@ -49,6 +55,12 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(fusioninferiov1alpha1.AddToScheme(scheme))
+
+	// Register external APIs
+	utilruntime.Must(gatewayv1.Install(scheme))
+	utilruntime.Must(inferenceapi.Install(scheme))
+	utilruntime.Must(lwsv1.AddToScheme(scheme))
+	utilruntime.Must(schedulingv1beta1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
