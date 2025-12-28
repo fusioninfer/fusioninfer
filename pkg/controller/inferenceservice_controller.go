@@ -36,7 +36,7 @@ import (
 	lwsv1 "sigs.k8s.io/lws/api/leaderworkerset/v1"
 	schedulingv1beta1 "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
 
-	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/v1alpha1"
+	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/core/v1alpha1"
 	"github.com/fusioninfer/fusioninfer/pkg/router"
 	"github.com/fusioninfer/fusioninfer/pkg/scheduling"
 	"github.com/fusioninfer/fusioninfer/pkg/workload"

@@ -32,7 +32,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/v1alpha1"
+	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/core/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 

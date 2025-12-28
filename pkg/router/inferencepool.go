@@ -22,7 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	inferenceapi "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 
-	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/v1alpha1"
+	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/core/v1alpha1"
 	"github.com/fusioninfer/fusioninfer/pkg/workload"
 )
 

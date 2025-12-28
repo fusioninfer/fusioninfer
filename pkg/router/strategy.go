@@ -19,7 +19,7 @@ package router
 import (
 	"fmt"
 
-	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/v1alpha1"
+	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/core/v1alpha1"
 	"github.com/fusioninfer/fusioninfer/pkg/scheduling"
 )
 

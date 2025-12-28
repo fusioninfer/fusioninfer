@@ -184,6 +184,7 @@ type InferenceServiceStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +genclient
 
 // InferenceService is the Schema for the inferenceservices API
 type InferenceService struct {
