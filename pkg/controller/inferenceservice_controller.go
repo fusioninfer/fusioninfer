@@ -22,7 +22,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -60,6 +59,7 @@ type InferenceServiceReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
+// Sets Processing at start, Failed on error, Active at end
 func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
@@ -75,17 +75,29 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	log.Info("Reconciling InferenceService", "name", inferSvc.Name)
 
-	// 2. Reconcile PodGroup for gang scheduling (must be created before LWS)
-	// Creates a single shared PodGroup for the entire InferenceService
-	if err := r.reconcilePodGroup(ctx, inferSvc); err != nil {
-		log.Error(err, "Failed to reconcile PodGroup")
+	// 2. Set Init condition (first time only)
+	if len(inferSvc.Status.Conditions) == 0 {
+		if err := r.setInferenceServiceInitCondition(ctx, inferSvc); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	// 3. Set Processing condition
+	if err := r.setInferenceServiceProcessingCondition(ctx, inferSvc); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// 3. Collect worker roles for router
+	// 4. Reconcile PodGroup for gang scheduling (must be created before LWS)
+	if err := r.reconcilePodGroup(ctx, inferSvc); err != nil {
+		log.Error(err, "Failed to reconcile PodGroup")
+		r.setInferenceServiceFailedCondition(ctx, inferSvc, err)
+		return ctrl.Result{}, err
+	}
+
+	// 5. Collect worker roles for router
 	var workerRoles []fusioninferiov1alpha1.Role
 
-	// 4. Reconcile workloads (LWS) for each role
+	// 6. Reconcile workloads (LWS) for each role
 	for _, role := range inferSvc.Spec.Roles {
 		switch role.ComponentType {
 		case fusioninferiov1alpha1.ComponentTypeWorker,
@@ -94,6 +106,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			workerRoles = append(workerRoles, role)
 			if err := r.reconcileLWS(ctx, inferSvc, role); err != nil {
 				log.Error(err, "Failed to reconcile LWS", "role", role.Name)
+				r.setInferenceServiceFailedCondition(ctx, inferSvc, err)
 				return ctrl.Result{}, err
 			}
 
@@ -102,20 +115,29 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 	}
 
-	// 5. Reconcile router components
+	// 7. Reconcile router components
 	for _, role := range inferSvc.Spec.Roles {
 		if role.ComponentType == fusioninferiov1alpha1.ComponentTypeRouter {
 			if err := r.reconcileRouter(ctx, inferSvc, role, workerRoles); err != nil {
 				log.Error(err, "Failed to reconcile Router", "role", role.Name)
+				r.setInferenceServiceFailedCondition(ctx, inferSvc, err)
 				return ctrl.Result{}, err
 			}
 		}
 	}
 
-	// 6. Update status
-	if err := r.updateStatus(ctx, inferSvc); err != nil {
-		log.Error(err, "Failed to update status")
+	// 8. Update component status and check readiness
+	if err := r.updateComponentStatus(ctx, inferSvc); err != nil {
+		log.Error(err, "Failed to update component status")
 		return ctrl.Result{}, err
+	}
+
+	// 9. Set Active condition if all components are ready
+	allReady := r.checkAllComponentsReady(inferSvc)
+	if allReady {
+		if err := r.setInferenceServiceActiveCondition(ctx, inferSvc); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	return ctrl.Result{}, nil
@@ -150,8 +172,9 @@ func (r *InferenceServiceReconciler) reconcilePodGroup(ctx context.Context, infe
 		return err
 	}
 
-	// Update only if spec changed
-	if !equality.Semantic.DeepEqual(existingPG.Spec, pg.Spec) {
+	// Update only if revision changed
+	if existingPG.Labels[workload.LabelRevision] != pg.Labels[workload.LabelRevision] {
+		existingPG.Labels = pg.Labels
 		existingPG.Spec = pg.Spec
 		log.V(1).Info("Updating PodGroup", "name", pg.Name)
 		return r.Update(ctx, existingPG)
@@ -209,10 +232,10 @@ func (r *InferenceServiceReconciler) reconcileLWS(ctx context.Context, inferSvc 
 			return err
 		}
 
-		// Update only if spec or labels changed
-		if !equality.Semantic.DeepEqual(existingLWS.Spec, lws.Spec) || !equality.Semantic.DeepEqual(existingLWS.Labels, lws.Labels) {
-			existingLWS.Spec = lws.Spec
+		// Update only if revision changed
+		if existingLWS.Labels[workload.LabelRevision] != lws.Labels[workload.LabelRevision] {
 			existingLWS.Labels = lws.Labels
+			existingLWS.Spec = lws.Spec
 			log.V(1).Info("Updating LWS", "name", lws.Name, "role", role.Name, "replica", i)
 			if err := r.Update(ctx, existingLWS); err != nil {
 				return err
@@ -334,7 +357,9 @@ func (r *InferenceServiceReconciler) reconcileEPPConfigMap(ctx context.Context, 
 		return err
 	}
 
-	if !equality.Semantic.DeepEqual(existing.Data, cm.Data) {
+	// Update only if revision changed
+	if existing.Labels[workload.LabelRevision] != cm.Labels[workload.LabelRevision] {
+		existing.Labels = cm.Labels
 		existing.Data = cm.Data
 		return r.Update(ctx, existing)
 	}
@@ -357,7 +382,9 @@ func (r *InferenceServiceReconciler) reconcileEPPDeployment(ctx context.Context,
 		return err
 	}
 
-	if !equality.Semantic.DeepEqual(existing.Spec, deploy.Spec) {
+	// Update only if revision changed
+	if existing.Labels[workload.LabelRevision] != deploy.Labels[workload.LabelRevision] {
+		existing.Labels = deploy.Labels
 		existing.Spec = deploy.Spec
 		return r.Update(ctx, existing)
 	}
@@ -380,7 +407,9 @@ func (r *InferenceServiceReconciler) reconcileEPPService(ctx context.Context, in
 		return err
 	}
 
-	if !equality.Semantic.DeepEqual(existing.Spec.Ports, svc.Spec.Ports) || !equality.Semantic.DeepEqual(existing.Spec.Selector, svc.Spec.Selector) {
+	// Update only if revision changed
+	if existing.Labels[workload.LabelRevision] != svc.Labels[workload.LabelRevision] {
+		existing.Labels = svc.Labels
 		existing.Spec.Ports = svc.Spec.Ports
 		existing.Spec.Selector = svc.Spec.Selector
 		return r.Update(ctx, existing)
@@ -404,7 +433,9 @@ func (r *InferenceServiceReconciler) reconcileInferencePool(ctx context.Context,
 		return err
 	}
 
-	if !equality.Semantic.DeepEqual(existing.Spec, pool.Spec) {
+	// Update only if revision changed
+	if existing.Labels[workload.LabelRevision] != pool.Labels[workload.LabelRevision] {
+		existing.Labels = pool.Labels
 		existing.Spec = pool.Spec
 		return r.Update(ctx, existing)
 	}
@@ -427,15 +458,18 @@ func (r *InferenceServiceReconciler) reconcileHTTPRoute(ctx context.Context, inf
 		return err
 	}
 
-	if !equality.Semantic.DeepEqual(existing.Spec, httpRoute.Spec) {
+	// Update only if revision changed
+	if existing.Labels[workload.LabelRevision] != httpRoute.Labels[workload.LabelRevision] {
+		existing.Labels = httpRoute.Labels
 		existing.Spec = httpRoute.Spec
 		return r.Update(ctx, existing)
 	}
 	return nil
 }
 
-// updateStatus updates the InferenceService status based on LWS states
-func (r *InferenceServiceReconciler) updateStatus(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService) error {
+// updateComponentStatus updates the InferenceService component status based on LWS states
+// Note: This only updates component status, not conditions (conditions are updated via setXxxCondition functions)
+func (r *InferenceServiceReconciler) updateComponentStatus(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService) error {
 	log := logf.FromContext(ctx)
 
 	components := make(map[string]fusioninferiov1alpha1.ComponentStatus)
@@ -460,15 +494,24 @@ func (r *InferenceServiceReconciler) updateStatus(ctx context.Context, inferSvc 
 		components[role.Name] = status
 	}
 
-	// Update conditions
-	conditions := buildConditions(components)
-
-	// Check if status actually changed
 	inferSvc.Status.Components = components
-	inferSvc.Status.Conditions = conditions
 
-	log.V(1).Info("Updating InferenceService status", "components", len(components))
+	log.V(1).Info("Updating InferenceService component status", "components", len(components))
 	return r.Status().Update(ctx, inferSvc)
+}
+
+// checkAllComponentsReady checks if all components are in Running phase
+func (r *InferenceServiceReconciler) checkAllComponentsReady(inferSvc *fusioninferiov1alpha1.InferenceService) bool {
+	if len(inferSvc.Status.Components) == 0 {
+		return false
+	}
+
+	for _, status := range inferSvc.Status.Components {
+		if status.Phase != fusioninferiov1alpha1.ComponentPhaseRunning {
+			return false
+		}
+	}
+	return true
 }
 
 // aggregateLWSStatus aggregates status from all per-replica LWS instances for a role
@@ -515,45 +558,6 @@ func (r *InferenceServiceReconciler) aggregateLWSStatus(ctx context.Context, inf
 		ReadyPods:     totalReadyPods,
 		Phase:         phase,
 	}
-}
-
-// buildConditions builds the conditions for the InferenceService
-func buildConditions(components map[string]fusioninferiov1alpha1.ComponentStatus) []metav1.Condition {
-	var conditions []metav1.Condition
-
-	allReady := true
-	anyFailed := false
-
-	for _, status := range components {
-		if status.Phase != fusioninferiov1alpha1.ComponentPhaseRunning {
-			allReady = false
-		}
-		if status.Phase == fusioninferiov1alpha1.ComponentPhaseFailed {
-			anyFailed = true
-		}
-	}
-
-	// Ready condition
-	readyCondition := metav1.Condition{
-		Type:               "Ready",
-		LastTransitionTime: metav1.Now(),
-	}
-	if allReady && len(components) > 0 {
-		readyCondition.Status = metav1.ConditionTrue
-		readyCondition.Reason = "AllComponentsReady"
-		readyCondition.Message = "All components are running"
-	} else if anyFailed {
-		readyCondition.Status = metav1.ConditionFalse
-		readyCondition.Reason = "ComponentFailed"
-		readyCondition.Message = "One or more components have failed"
-	} else {
-		readyCondition.Status = metav1.ConditionFalse
-		readyCondition.Reason = "ComponentsNotReady"
-		readyCondition.Message = "One or more components are not ready"
-	}
-	conditions = append(conditions, readyCondition)
-
-	return conditions
 }
 
 // SetupWithManager sets up the controller with the Manager.

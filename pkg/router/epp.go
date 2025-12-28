@@ -17,6 +17,7 @@ limitations under the License.
 package router
 
 import (
+	"fmt"
 	"os"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -62,7 +63,8 @@ func BuildEPPConfigMap(inferSvc *fusioninferiov1alpha1.InferenceService, role fu
 			Name:      configMapName,
 			Namespace: inferSvc.Namespace,
 			Labels: map[string]string{
-				workload.LabelService: inferSvc.Name,
+				workload.LabelService:  inferSvc.Name,
+				workload.LabelRevision: fmt.Sprintf("%d", inferSvc.Generation),
 			},
 		},
 		Data: map[string]string{
@@ -78,8 +80,9 @@ func BuildEPPDeployment(inferSvc *fusioninferiov1alpha1.InferenceService) *appsv
 	poolName := GeneratePoolName(inferSvc.Name)
 
 	labels := map[string]string{
-		"app":                 deploymentName,
-		workload.LabelService: inferSvc.Name,
+		"app":                  deploymentName,
+		workload.LabelService:  inferSvc.Name,
+		workload.LabelRevision: fmt.Sprintf("%d", inferSvc.Generation),
 	}
 
 	return &appsv1.Deployment{
@@ -201,7 +204,8 @@ func BuildEPPService(inferSvc *fusioninferiov1alpha1.InferenceService) *corev1.S
 			Name:      serviceName,
 			Namespace: inferSvc.Namespace,
 			Labels: map[string]string{
-				workload.LabelService: inferSvc.Name,
+				workload.LabelService:  inferSvc.Name,
+				workload.LabelRevision: fmt.Sprintf("%d", inferSvc.Generation),
 			},
 		},
 		Spec: corev1.ServiceSpec{
@@ -242,7 +246,8 @@ func BuildEPPServiceAccount(inferSvc *fusioninferiov1alpha1.InferenceService) *c
 			Name:      saName,
 			Namespace: inferSvc.Namespace,
 			Labels: map[string]string{
-				workload.LabelService: inferSvc.Name,
+				workload.LabelService:  inferSvc.Name,
+				workload.LabelRevision: fmt.Sprintf("%d", inferSvc.Generation),
 			},
 		},
 	}

@@ -41,6 +41,7 @@ const (
 	LabelComponentType = "fusioninfer.io/component-type"
 	LabelRoleName      = "fusioninfer.io/role-name"
 	LabelReplicaIndex  = "fusioninfer.io/replica-index"
+	LabelRevision      = "fusioninfer.io/revision"
 
 	// Annotations for Volcano gang scheduling
 	AnnotationPodGroupName = "scheduling.k8s.io/group-name"
@@ -83,11 +84,12 @@ func BuildLWS(inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninfer
 		replicas = *role.Replicas
 	}
 
-	// Build labels
+	// Build labels with revision for update detection
 	labels := map[string]string{
 		LabelService:       inferSvc.Name,
 		LabelComponentType: string(role.ComponentType),
 		LabelRoleName:      role.Name,
+		LabelRevision:      fmt.Sprintf("%d", inferSvc.Generation),
 	}
 
 	// Add replica index label for per-replica mode

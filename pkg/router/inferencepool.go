@@ -46,7 +46,8 @@ func BuildInferencePool(inferSvc *fusioninferiov1alpha1.InferenceService, worker
 			Name:      poolName,
 			Namespace: inferSvc.Namespace,
 			Labels: map[string]string{
-				workload.LabelService: inferSvc.Name,
+				workload.LabelService:  inferSvc.Name,
+				workload.LabelRevision: fmt.Sprintf("%d", inferSvc.Generation),
 			},
 		},
 		Spec: inferenceapi.InferencePoolSpec{

@@ -18,6 +18,7 @@ package router
 
 import (
 	"encoding/json"
+	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -42,7 +43,8 @@ func BuildHTTPRoute(inferSvc *fusioninferiov1alpha1.InferenceService, role fusio
 			Name:      routeName,
 			Namespace: inferSvc.Namespace,
 			Labels: map[string]string{
-				workload.LabelService: inferSvc.Name,
+				workload.LabelService:  inferSvc.Name,
+				workload.LabelRevision: fmt.Sprintf("%d", inferSvc.Generation),
 			},
 		},
 		Spec: gatewayv1.HTTPRouteSpec{},

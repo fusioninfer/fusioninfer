@@ -25,6 +25,7 @@ import (
 	schedulingv1beta1 "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
 
 	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/v1alpha1"
+	"github.com/fusioninfer/fusioninfer/pkg/workload"
 )
 
 // IsPDDisaggregated returns true if the InferenceService has both prefiller and decoder roles
@@ -134,7 +135,8 @@ func BuildPodGroup(inferSvc *fusioninferiov1alpha1.InferenceService) *scheduling
 			Name:      pgName,
 			Namespace: inferSvc.Namespace,
 			Labels: map[string]string{
-				"fusioninfer.io/service": inferSvc.Name,
+				workload.LabelService:  inferSvc.Name,
+				workload.LabelRevision: fmt.Sprintf("%d", inferSvc.Generation),
 			},
 		},
 		Spec: schedulingv1beta1.PodGroupSpec{
