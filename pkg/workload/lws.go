@@ -114,7 +114,8 @@ func BuildLWS(inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninfer
 			Labels:    labels,
 		},
 		Spec: lwsv1.LeaderWorkerSetSpec{
-			Replicas: ptr.To(replicas),
+			Replicas:      ptr.To(replicas),
+			StartupPolicy: lwsv1.LeaderCreatedStartupPolicy,
 			LeaderWorkerTemplate: lwsv1.LeaderWorkerTemplate{
 				Size: ptr.To(size),
 				WorkerTemplate: corev1.PodTemplateSpec{
