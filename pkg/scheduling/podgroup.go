@@ -17,6 +17,7 @@ limitations under the License.
 package scheduling
 
 import (
+	"encoding/json"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
@@ -148,11 +149,21 @@ func BuildPodGroup(inferSvc *fusioninferiov1alpha1.InferenceService) *scheduling
 
 // addRoleResources adds the resource requirements for a role to the resource list
 func addRoleResources(resources corev1.ResourceList, role fusioninferiov1alpha1.Role, totalPods int32) {
-	if role.Template == nil || len(role.Template.Spec.Containers) == 0 {
+	if role.Template == nil || role.Template.Raw == nil {
 		return
 	}
 
-	for _, container := range role.Template.Spec.Containers {
+	// Parse PodTemplateSpec from RawExtension
+	var template corev1.PodTemplateSpec
+	if err := json.Unmarshal(role.Template.Raw, &template); err != nil {
+		return
+	}
+
+	if len(template.Spec.Containers) == 0 {
+		return
+	}
+
+	for _, container := range template.Spec.Containers {
 		if container.Resources.Limits != nil {
 			for resourceName, quantity := range container.Resources.Limits {
 				// Multiply by totalPods

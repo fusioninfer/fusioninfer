@@ -17,7 +17,6 @@ limitations under the License.
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -98,10 +97,11 @@ type Role struct {
 	// +optional
 	Multinode *Multinode `json:"multinode,omitempty"`
 
-	// Template defines the pod spec for this component
+	// Template defines the pod spec for this component (corev1.PodTemplateSpec)
+	// Use runtime.RawExtension to avoid CRD size limits
 	// +optional
 	// +kubebuilder:pruning:PreserveUnknownFields
-	Template *corev1.PodTemplateSpec `json:"template,omitempty"`
+	Template *runtime.RawExtension `json:"template,omitempty"`
 }
 
 // SchedulingStrategy defines pod-level scheduling behavior.

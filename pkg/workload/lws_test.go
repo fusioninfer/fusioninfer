@@ -17,15 +17,26 @@ limitations under the License.
 package workload
 
 import (
+	"encoding/json"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 
 	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/v1alpha1"
 )
+
+// Helper to convert PodTemplateSpec to RawExtension for tests
+func toRawExtension(template *corev1.PodTemplateSpec) *runtime.RawExtension {
+	if template == nil {
+		return nil
+	}
+	raw, _ := json.Marshal(template)
+	return &runtime.RawExtension{Raw: raw}
+}
 
 func TestBuildLWS(t *testing.T) {
 	t.Run("basic single node LWS", func(t *testing.T) {
@@ -40,7 +51,7 @@ func TestBuildLWS(t *testing.T) {
 			Name:          "worker",
 			ComponentType: fusioninferiov1alpha1.ComponentTypeWorker,
 			Replicas:      ptr.To(int32(2)),
-			Template: &corev1.PodTemplateSpec{
+			Template: toRawExtension(&corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
@@ -49,7 +60,7 @@ func TestBuildLWS(t *testing.T) {
 						},
 					},
 				},
-			},
+			}),
 		}
 
 		config := LWSConfig{
@@ -100,7 +111,7 @@ func TestBuildLWS(t *testing.T) {
 			ComponentType: fusioninferiov1alpha1.ComponentTypeWorker,
 			Replicas:      ptr.To(int32(1)),
 			Multinode:     &fusioninferiov1alpha1.Multinode{NodeCount: 4},
-			Template: &corev1.PodTemplateSpec{
+			Template: toRawExtension(&corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
@@ -114,7 +125,7 @@ func TestBuildLWS(t *testing.T) {
 						},
 					},
 				},
-			},
+			}),
 		}
 
 		config := LWSConfig{
@@ -166,7 +177,7 @@ func TestBuildLWS(t *testing.T) {
 			Name:          "worker",
 			ComponentType: fusioninferiov1alpha1.ComponentTypeWorker,
 			Replicas:      ptr.To(int32(3)),
-			Template: &corev1.PodTemplateSpec{
+			Template: toRawExtension(&corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
@@ -175,7 +186,7 @@ func TestBuildLWS(t *testing.T) {
 						},
 					},
 				},
-			},
+			}),
 		}
 
 		replicaIndex := int32(1)

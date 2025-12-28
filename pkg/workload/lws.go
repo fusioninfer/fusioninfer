@@ -17,6 +17,7 @@ limitations under the License.
 package workload
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -134,8 +135,12 @@ func BuildLWS(inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninfer
 func buildPodSpec(role fusioninferiov1alpha1.Role, needsGangScheduling bool, isMultiNode bool) corev1.PodSpec {
 	var spec corev1.PodSpec
 
-	if role.Template != nil && role.Template.Spec.Containers != nil {
-		spec = *role.Template.Spec.DeepCopy()
+	// Parse PodTemplateSpec from RawExtension
+	if role.Template != nil && role.Template.Raw != nil {
+		var template corev1.PodTemplateSpec
+		if err := json.Unmarshal(role.Template.Raw, &template); err == nil {
+			spec = *template.Spec.DeepCopy()
+		}
 	}
 
 	// Set Volcano scheduler if gang scheduling is needed

@@ -17,15 +17,26 @@ limitations under the License.
 package scheduling
 
 import (
+	"encoding/json"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 
 	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/v1alpha1"
 )
+
+// Helper to convert PodTemplateSpec to RawExtension for tests
+func toRawExtension(template *corev1.PodTemplateSpec) *runtime.RawExtension {
+	if template == nil {
+		return nil
+	}
+	raw, _ := json.Marshal(template)
+	return &runtime.RawExtension{Raw: raw}
+}
 
 func TestIsPDDisaggregated(t *testing.T) {
 	tests := []struct {
@@ -237,7 +248,7 @@ func TestBuildPodGroup(t *testing.T) {
 						Name:          "prefill",
 						ComponentType: fusioninferiov1alpha1.ComponentTypePrefiller,
 						Replicas:      ptr.To(int32(1)),
-						Template: &corev1.PodTemplateSpec{
+						Template: toRawExtension(&corev1.PodTemplateSpec{
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
 									{
@@ -249,13 +260,13 @@ func TestBuildPodGroup(t *testing.T) {
 									},
 								},
 							},
-						},
+						}),
 					},
 					{
 						Name:          "decode",
 						ComponentType: fusioninferiov1alpha1.ComponentTypeDecoder,
 						Replicas:      ptr.To(int32(2)),
-						Template: &corev1.PodTemplateSpec{
+						Template: toRawExtension(&corev1.PodTemplateSpec{
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
 									{
@@ -267,7 +278,7 @@ func TestBuildPodGroup(t *testing.T) {
 									},
 								},
 							},
-						},
+						}),
 					},
 				},
 			},
