@@ -251,43 +251,19 @@ spec:
                   nvidia.com/gpu: "8"
 ```
 
-## Documentation
-
-- [Core Design](docs/core-design/README.md) - InferenceService CRD design and gang scheduling
-- [Router](docs/router/README.md) - Gateway API integration and EPP configuration
-- [Model Loader](docs/model-loader/README.md) - Model loading utilities
-
-## Development
+## Send Request
 
 ```bash
-# Run tests
-make test
+# You can use minikube tunnel to assign IP address to an LoadBalancer Type Service
+GATEWAY_IP=$(kubectl get gateway inference-gateway -o jsonpath='{.status.addresses[0].value}')
 
-# Run e2e tests
-make test-e2e
+curl -X POST "http://${GATEWAY_IP}/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen3-8B",
+    "messages": [
+      {"role": "user", "content": "Hello, how are you?"}
+    ]
+  }'
 
-# Run linter
-make lint
-
-# Generate manifests
-make manifests
-
-# Generate code
-make generate
 ```
-
-## License
-
-Copyright 2025.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.

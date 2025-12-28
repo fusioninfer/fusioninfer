@@ -29,7 +29,7 @@ import (
 
 const (
 	// InferencePool API group
-	InferencePoolGroup = "inference.networking.x-k8s.io"
+	InferencePoolGroup = "inference.networking.k8s.io"
 	InferencePoolKind  = "InferencePool"
 )
 
