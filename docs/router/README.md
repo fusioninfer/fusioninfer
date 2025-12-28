@@ -188,14 +188,14 @@ type RoleSpec struct {
     ComponentType ComponentType `json:"componentType"`
     
     // Router-specific fields (only for componentType: router)
-    Strategy              RoutingStrategy          `json:"strategy,omitempty"`
-    HTTPRoute             *gatewayv1.HTTPRouteSpec `json:"httproute,omitempty"`
-    Gateway               *gatewayv1.GatewaySpec   `json:"gateway,omitempty"`
-    EndpointPickerConfig  string                   `json:"endpointPickerConfig,omitempty"`  // Raw YAML for advanced users
+    Strategy              RoutingStrategy        `json:"strategy,omitempty"`
+    HTTPRoute             *runtime.RawExtension  `json:"httproute,omitempty"`   // Gateway API HTTPRouteSpec
+    Gateway               *runtime.RawExtension  `json:"gateway,omitempty"`     // Gateway API GatewaySpec
+    EndpointPickerConfig  string                 `json:"endpointPickerConfig,omitempty"`  // Raw YAML for advanced users
     
     // Worker-specific fields (for prefiller/decoder/worker)
-    Replicas       *int32                `json:"replicas,omitempty"`
-    Template       *corev1.PodTemplateSpec `json:"template,omitempty"`
+    Replicas       *int32                 `json:"replicas,omitempty"`
+    Template       *runtime.RawExtension  `json:"template,omitempty"`  // corev1.PodTemplateSpec
 }
 
 // ComponentType defines the type of component
@@ -268,13 +268,13 @@ spec:
   - "api.example.com"
   rules:
   - backendRefs:
-    - group: inference.networking.x-k8s.io
+    - group: inference.networking.k8s.io
       kind: InferencePool
       name: my-service-pool
 
 ---
 # 2. InferencePool - Manages the inference backend pods
-apiVersion: inference.networking.x-k8s.io/v1
+apiVersion: inference.networking.k8s.io/v1
 kind: InferencePool
 metadata:
   name: my-service-pool
@@ -335,7 +335,7 @@ spec:
       serviceAccountName: my-service-epp
       containers:
       - name: epp
-        image: ghcr.io/kubernetes-sigs/gateway-api-inference-extension/epp:v1.2.1
+        image: registry.k8s.io/gateway-api-inference-extension/epp:v1.2.1
         args:
         - --pool-name=my-service-pool
         - --pool-namespace=default
@@ -388,6 +388,9 @@ spec:
   ports:
   - name: grpc-ext-proc
     port: 9002
+    protocol: TCP
+  - name: grpc-health
+    port: 9003
     protocol: TCP
   - name: http-metrics
     port: 9090
@@ -498,7 +501,7 @@ The FusionInfer Router Controller will automatically create the following Gatewa
 
 ```yaml
 # 1. InferencePool - Single pool managing both prefill and decode pods
-apiVersion: inference.networking.x-k8s.io/v1
+apiVersion: inference.networking.k8s.io/v1
 kind: InferencePool
 metadata:
   name: disaggregated-llm-service-pool
@@ -611,7 +614,7 @@ spec:
     spec:
       containers:
       - name: epp
-        image: gateway-api-inference-extension:latest
+        image: registry.k8s.io/gateway-api-inference-extension/epp:v1.2.1
         args:
         - --pool-name=disaggregated-llm-service-pool
         - --pool-namespace=default
@@ -639,6 +642,8 @@ spec:
   ports:
   - name: grpc-ext-proc
     port: 9002
+  - name: grpc-health
+    port: 9003
   - name: http-metrics
     port: 9090
 ```

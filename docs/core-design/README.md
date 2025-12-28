@@ -365,11 +365,11 @@ Combines prefill/decode disaggregation with multi-node parallelism for maximum s
 │                                  InferenceService                                     │
 │                              name: deepseek-r1-disagg                                 │
 └─────────────────────────────────────────┬─────────────────────────────────────────────┘
-                        │
-                          ┌───────────────┴───────────────┐
-        │          Roles (2)            │
-        └───────────────┬───────────────┘
-                        │
+                                         │
+                          ┌──────────────┴──────────────┐
+                          │          Roles (2)          │
+                          └──────────────┬──────────────┘
+                                         │
              ┌────────────────────────────┼────────────────────────────┐
              │                                                         │
              ▼                                                         ▼
@@ -429,6 +429,7 @@ The controller uses **LeaderWorkerSet (LWS)** for all deployments to provide uni
 | `fusioninfer.io/component-type` | Component type (worker/prefiller/decoder) |
 | `fusioninfer.io/role-name` | Role name from spec |
 | `fusioninfer.io/replica-index` | Replica index (only in per-replica mode) |
+| `fusioninfer.io/revision` | InferenceService generation for update detection |
 
 **Example 1: Single-Node LWS**
 
@@ -716,11 +717,22 @@ spec:
 ### CRD Structure Overview
 
 ```go
+// ComponentType defines the type of component in the inference pipeline
+// +kubebuilder:validation:Enum=router;prefiller;decoder;worker
+type ComponentType string
+
+const (
+    ComponentTypeRouter    ComponentType = "router"
+    ComponentTypePrefiller ComponentType = "prefiller"
+    ComponentTypeDecoder   ComponentType = "decoder"
+    ComponentTypeWorker    ComponentType = "worker"
+)
+
 // InferenceServiceSpec defines the desired state of InferenceService.
 type InferenceServiceSpec struct {
     // Roles is a list of logical components in the inference topology.
     // Each role is identified by a user-defined Name and classified by ComponentType.
-    Roles []Role `json:"roles,omitempty"`
+    Roles []Role `json:"roles"`
     
     // SchedulingStrategy applies cluster-wide scheduling policies (e.g., Volcano).
     // +optional
@@ -744,27 +756,37 @@ type Role struct {
     // - "prefiller": prompt processing
     // - "decoder": token generation
     // - "router": request router with scheduling plugins
-    ComponentType string `json:"componentType"`
+    ComponentType ComponentType `json:"componentType"`
 
+    // Router-specific fields (only for componentType: router)
+    
+    // Strategy defines the routing strategy for the router component
+    // +optional
+    Strategy RoutingStrategy `json:"strategy,omitempty"`
+    
+    // HTTPRoute defines the HTTPRoute spec for routing traffic (Gateway API)
+    // +optional
+    HTTPRoute *runtime.RawExtension `json:"httproute,omitempty"`
+    
+    // EndpointPickerConfig is raw YAML for advanced EPP customization
+    // +optional
+    EndpointPickerConfig string `json:"endpointPickerConfig,omitempty"`
+
+    // Worker-specific fields (for prefiller/decoder/worker)
+    
     // Replicas specifies how many independent distributed instances to create.
-    // Each instance is a self-contained unit (either a single Deployment or a Header+Worker pair).
     // Default: 1
     // +optional
-    Replicas int32 `json:"replicas,omitempty"`
+    Replicas *int32 `json:"replicas,omitempty"`
 
-    // Multinode enables distributed inference with a built-in Header + Worker topology.
-    // When Multinode is specified (and NodeCount >= 2), each roleReplica is implemented as
-    // a LeaderWorkerSet (LWS) consisting of:
-    //   - 1 Leader pod (header)
-    //   - (NodeCount - 1) Worker pods
-    // The controller will use LWS as the underlying workload instead of Deployment.
-    // If Multinode is nil, a standard Deployment is used (single).
+    // Multinode enables distributed inference with a built-in Leader + Worker topology.
     // +optional
     Multinode *Multinode `json:"multinode,omitempty"`
 
     // Template defines the pod spec for this component.
+    // Uses runtime.RawExtension to avoid CRD size limits.
     // +optional
-    Template *corev1.PodTemplateSpec `json:"template,omitempty"`
+    Template *runtime.RawExtension `json:"template,omitempty"`
 }
 
 // Multinode enables multi-node distributed inference.
@@ -775,6 +797,10 @@ type Multinode struct {
 
 // InferenceServiceStatus reflects the observed state of the InferenceService.
 type InferenceServiceStatus struct {
+    // ObservedGeneration is the most recent generation observed by the controller.
+    // +optional
+    ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+    
     // Conditions represent the latest available observations of the service's state.
     Conditions []metav1.Condition `json:"conditions,omitempty"`
     

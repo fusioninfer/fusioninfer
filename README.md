@@ -20,9 +20,9 @@ FusionInfer provides a single `InferenceService` CRD that enables:
 │   (roles: worker/prefiller/decoder, replicas, multinode)        │
 └─────────────────────────────────┬───────────────────────────────┘
                                   │
-                    ┌─────────────┴─────────────┐
-                    │  InferenceService Controller │
-                    └─────────────┬─────────────┘
+                    ┌───────────────────────────────┐
+                    │   InferenceService Controller │
+                    └───────────────┬───────────────┘
                                   │
         ┌─────────────────────────┼─────────────────────────┐
         │                         │                         │
@@ -35,13 +35,6 @@ FusionInfer provides a single `InferenceService` CRD that enables:
 ```
 
 ## Getting Started
-
-### Prerequisites
-
-- Go version v1.24.0+
-- Docker version 17.03+
-- kubectl version v1.11.3+
-- Access to a Kubernetes v1.11.3+ cluster
 
 ### Install Dependencies
 
@@ -115,39 +108,6 @@ make install
 make run
 ```
 
-### Deploy to Cluster
-
-**Build and push your image:**
-
-```bash
-make docker-build docker-push IMG=<some-registry>/fusioninfer:tag
-```
-
-**Deploy the controller:**
-
-```bash
-make deploy IMG=<some-registry>/fusioninfer:tag
-```
-
-**Apply sample resources:**
-
-```bash
-kubectl apply -k config/samples/
-```
-
-### Uninstall
-
-```bash
-# Delete sample resources
-kubectl delete -k config/samples/
-
-# Uninstall CRDs
-make uninstall
-
-# Undeploy controller
-make undeploy
-```
-
 ## Usage Examples
 
 ### Monolithic LLM Service
@@ -177,78 +137,6 @@ spec:
               resources:
                 limits:
                   nvidia.com/gpu: "1"
-```
-
-### PD Disaggregated Service
-
-```yaml
-apiVersion: fusioninfer.io/v1alpha1
-kind: InferenceService
-metadata:
-  name: qwen-pd-service
-spec:
-  roles:
-    - name: router
-      componentType: router
-      strategy: pd-disaggregation
-      httproute:
-        parentRefs:
-          - name: inference-gateway
-    - name: prefill
-      componentType: prefiller
-      replicas: 2
-      template:
-        spec:
-          containers:
-            - name: vllm
-              image: vllm/vllm-openai:v0.11.0
-              args:
-                - "--model"
-                - "Qwen/Qwen3-8B"
-                - "--kv-transfer-config"
-                - '{"kv_connector":"PyNcclConnector","kv_role":"kv_producer"}'
-    - name: decode
-      componentType: decoder
-      replicas: 4
-      template:
-        spec:
-          containers:
-            - name: vllm
-              image: vllm/vllm-openai:v0.11.0
-              args:
-                - "--model"
-                - "Qwen/Qwen3-8B"
-                - "--kv-transfer-config"
-                - '{"kv_connector":"PyNcclConnector","kv_role":"kv_consumer"}'
-```
-
-### Multi-Node Inference
-
-```yaml
-apiVersion: fusioninfer.io/v1alpha1
-kind: InferenceService
-metadata:
-  name: deepseek-r1
-spec:
-  roles:
-    - name: inference
-      componentType: worker
-      replicas: 2
-      multinode:
-        nodeCount: 4
-      template:
-        spec:
-          containers:
-            - name: vllm
-              image: vllm/vllm-openai:v0.11.0
-              args:
-                - "--model"
-                - "deepseek-ai/DeepSeek-R1"
-                - "--tensor-parallel-size"
-                - "32"
-              resources:
-                limits:
-                  nvidia.com/gpu: "8"
 ```
 
 ## Send Request
