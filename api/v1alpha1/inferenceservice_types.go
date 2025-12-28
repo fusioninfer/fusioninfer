@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // ComponentType defines the type of component in the inference pipeline
@@ -71,9 +72,15 @@ type Role struct {
 	// +optional
 	Strategy RoutingStrategy `json:"strategy,omitempty"`
 
-	// HTTPRoute defines the HTTPRoute configuration for routing traffic
+	// HTTPRoute defines the HTTPRoute spec for routing traffic
 	// +optional
-	HTTPRoute *HTTPRouteConfig `json:"httproute,omitempty"`
+	// +kubebuilder:pruning:PreserveUnknownFields
+	HTTPRoute *gatewayv1.HTTPRouteSpec `json:"httproute,omitempty"`
+
+	// Gateway defines the Gateway spec for this router
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	Gateway *gatewayv1.GatewaySpec `json:"gateway,omitempty"`
 
 	// EndpointPickerConfig is raw YAML for advanced EndpointPickerConfig customization
 	// +optional
@@ -91,6 +98,7 @@ type Role struct {
 
 	// Template defines the pod spec for this component
 	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
 	Template *corev1.PodTemplateSpec `json:"template,omitempty"`
 }
 
@@ -106,32 +114,6 @@ type Multinode struct {
 	// NodeCount is the number of distinct nodes to distribute this component across.
 	// +kubebuilder:validation:Minimum=1
 	NodeCount int32 `json:"nodeCount"`
-}
-
-// HTTPRouteConfig defines simplified HTTPRoute configuration
-type HTTPRouteConfig struct {
-	// ParentRefs references the Gateway(s) that the HTTPRoute should attach to
-	// +optional
-	ParentRefs []ParentReference `json:"parentRefs,omitempty"`
-
-	// Hostnames defines a set of hostnames that the HTTPRoute should match
-	// +optional
-	Hostnames []string `json:"hostnames,omitempty"`
-}
-
-// ParentReference identifies a Gateway to attach the route to
-type ParentReference struct {
-	// Name is the name of the Gateway
-	// +kubebuilder:validation:Required
-	Name string `json:"name"`
-
-	// Namespace is the namespace of the Gateway (defaults to route's namespace)
-	// +optional
-	Namespace string `json:"namespace,omitempty"`
-
-	// SectionName is the name of a section within the target Gateway
-	// +optional
-	SectionName string `json:"sectionName,omitempty"`
 }
 
 // ComponentPhase is a simple, high-level summary of where the component is in its lifecycle.

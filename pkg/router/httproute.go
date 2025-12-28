@@ -46,38 +46,12 @@ func BuildHTTPRoute(inferSvc *fusioninferiov1alpha1.InferenceService, role fusio
 		Spec: gatewayv1.HTTPRouteSpec{},
 	}
 
-	// Convert our simplified HTTPRouteConfig to Gateway API types
+	// Copy user-provided HTTPRouteSpec (ParentRefs, Hostnames, etc.)
 	if role.HTTPRoute != nil {
-		// Convert ParentRefs
-		if len(role.HTTPRoute.ParentRefs) > 0 {
-			parentRefs := make([]gatewayv1.ParentReference, len(role.HTTPRoute.ParentRefs))
-			for i, ref := range role.HTTPRoute.ParentRefs {
-				parentRefs[i] = gatewayv1.ParentReference{
-					Name: gatewayv1.ObjectName(ref.Name),
-				}
-				if ref.Namespace != "" {
-					ns := gatewayv1.Namespace(ref.Namespace)
-					parentRefs[i].Namespace = &ns
-				}
-				if ref.SectionName != "" {
-					sn := gatewayv1.SectionName(ref.SectionName)
-					parentRefs[i].SectionName = &sn
-				}
-			}
-			httpRoute.Spec.ParentRefs = parentRefs
-		}
-
-		// Convert Hostnames
-		if len(role.HTTPRoute.Hostnames) > 0 {
-			hostnames := make([]gatewayv1.Hostname, len(role.HTTPRoute.Hostnames))
-			for i, h := range role.HTTPRoute.Hostnames {
-				hostnames[i] = gatewayv1.Hostname(h)
-			}
-			httpRoute.Spec.Hostnames = hostnames
-		}
+		httpRoute.Spec = *role.HTTPRoute
 	}
 
-	// Always add the InferencePool backend rule
+	// Always add/override the InferencePool backend rule
 	httpRoute.Spec.Rules = []gatewayv1.HTTPRouteRule{
 		{
 			BackendRefs: []gatewayv1.HTTPBackendRef{

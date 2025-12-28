@@ -89,17 +89,18 @@ func TestBuildHTTPRouteWithUserProvidedSpec(t *testing.T) {
 		},
 	}
 
+	ns := gatewayv1.Namespace("gateway-ns")
 	role := fusioninferiov1alpha1.Role{
 		Name:          "router",
 		ComponentType: fusioninferiov1alpha1.ComponentTypeRouter,
-		HTTPRoute: &fusioninferiov1alpha1.HTTPRouteConfig{
-			ParentRefs: []fusioninferiov1alpha1.ParentReference{
+		HTTPRoute: &gatewayv1.HTTPRouteSpec{
+			ParentRefs: []gatewayv1.ParentReference{
 				{
 					Name:      "my-gateway",
-					Namespace: "gateway-ns",
+					Namespace: &ns,
 				},
 			},
-			Hostnames: []string{"api.example.com"},
+			Hostnames: []gatewayv1.Hostname{"api.example.com"},
 		},
 	}
 
@@ -141,14 +142,15 @@ func TestBuildHTTPRouteWithSectionName(t *testing.T) {
 		},
 	}
 
+	sectionName := gatewayv1.SectionName("https")
 	role := fusioninferiov1alpha1.Role{
 		Name:          "router",
 		ComponentType: fusioninferiov1alpha1.ComponentTypeRouter,
-		HTTPRoute: &fusioninferiov1alpha1.HTTPRouteConfig{
-			ParentRefs: []fusioninferiov1alpha1.ParentReference{
+		HTTPRoute: &gatewayv1.HTTPRouteSpec{
+			ParentRefs: []gatewayv1.ParentReference{
 				{
 					Name:        "my-gateway",
-					SectionName: "https",
+					SectionName: &sectionName,
 				},
 			},
 		},
