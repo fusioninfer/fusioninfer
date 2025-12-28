@@ -4,18 +4,16 @@ import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
   title: 'FusionInfer',
-  tagline: 'Unified Kubernetes-native LLM inference platform with intelligent routing and gang scheduling',
+  tagline: 'A Kubernetes-native platform for orchestrating distributed LLM inference at scale',
   favicon: 'img/favicon.ico',
 
   future: {
     v4: true,
   },
 
-  // For GitHub Pages deployment
-  // If using custom domain: url: 'https://fusioninfer.io', baseUrl: '/'
-  // If using github.io: url: 'https://<org>.github.io', baseUrl: '/<repo>/'
+  // For GitHub Pages deployment with custom domain
   url: 'https://fusioninfer.github.io',
-  baseUrl: '/fusioninfer/',
+  baseUrl: '/',
 
   organizationName: 'fusioninfer',
   projectName: 'fusioninfer',
