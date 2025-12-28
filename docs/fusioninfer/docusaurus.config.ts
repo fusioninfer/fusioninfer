@@ -13,7 +13,7 @@ const config: Config = {
 
   // For GitHub Pages deployment with custom domain
   url: 'https://fusioninfer.github.io',
-  baseUrl: '/',
+  baseUrl: '/fusioninfer/',
 
   organizationName: 'fusioninfer',
   projectName: 'fusioninfer',
