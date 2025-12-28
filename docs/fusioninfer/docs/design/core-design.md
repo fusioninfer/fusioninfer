@@ -1,29 +1,9 @@
-# FusionInfer InferenceService CRD: Unified Support for LLM Serving
+---
+sidebar_position: 1
+title: InferenceService CRD Design
+---
 
-<!-- toc -->
-- [Summary](#summary)
-- [Motivation](#motivation)
-  - [Goals](#goals)
-  - [Non-Goals](#non-goals)
-- [User Stories](#user-stories)
-  - [Story 1: Deploy a monolithic LLM service](#story-1-deploy-a-monolithic-llm-service)
-  - [Story 2: Deploy a disaggregated prefill/decode service](#story-2-deploy-a-disaggregated-prefilldecode-service)
-  - [Story 3: Deploy a multi-node inference service for large models](#story-3-deploy-a-multi-node-inference-service-for-large-models)
-  - [Story 4: Deploy a disaggregated multi-node prefill/decode service](#story-4-deploy-a-disaggregated-multi-node-prefilldecode-service)
-- [Proposal](#proposal)
-  - [Component Types](#component-types)
-  - [Reconciliation Logic](#reconciliation-logic)
-    - [Monolithic Deployment (Story 1)](#monolithic-deployment-story-1)
-    - [Disaggregated PD Deployment (Story 2)](#disaggregated-pd-deployment-story-2)
-    - [Multi-Node Deployment (Story 3)](#multi-node-deployment-story-3)
-    - [Disaggregated Multi-Node Deployment (Story 4)](#disaggregated-multi-node-deployment-story-4)
-  - [LeaderWorkerSet (LWS) Workload Management](#leaderworkerset-lws-workload-management)
-  - [Gang Scheduling Behavior](#gang-scheduling-behavior)
-    - [PodGroup Management](#podgroup-management)
-    - [Key Annotations for Volcano Gang Scheduling](#key-annotations-for-volcano-gang-scheduling)
-    - [InferenceService Controller responsibilities](#inferenceservice-controller-responsibilities)
-  - [CRD Structure Overview](#crd-structure-overview)
-<!-- /toc -->
+# InferenceService CRD Design
 
 ## Summary
 

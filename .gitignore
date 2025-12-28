@@ -28,3 +28,12 @@ go.work
 
 # MacOS
 .DS_Store
+
+# Node.js
+node_modules/
+.npm
+.pnpm-store
+
+# Docusaurus
+docs/fusioninfer/.docusaurus/
+docs/fusioninfer/build/
