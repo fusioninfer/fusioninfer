@@ -79,7 +79,14 @@ func BuildEPPDeployment(inferSvc *fusioninferiov1alpha1.InferenceService) *appsv
 	configMapName := GenerateEPPConfigMapName(inferSvc.Name)
 	poolName := GeneratePoolName(inferSvc.Name)
 
-	labels := map[string]string{
+	// Selector labels are immutable, so don't include revision
+	selectorLabels := map[string]string{
+		"app":                 deploymentName,
+		workload.LabelService: inferSvc.Name,
+	}
+
+	// Metadata labels include revision for update detection
+	metadataLabels := map[string]string{
 		"app":                  deploymentName,
 		workload.LabelService:  inferSvc.Name,
 		workload.LabelRevision: fmt.Sprintf("%d", inferSvc.Generation),
@@ -89,7 +96,7 @@ func BuildEPPDeployment(inferSvc *fusioninferiov1alpha1.InferenceService) *appsv
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      deploymentName,
 			Namespace: inferSvc.Namespace,
-			Labels:    labels,
+			Labels:    metadataLabels,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: ptr.To(int32(1)),
@@ -97,11 +104,11 @@ func BuildEPPDeployment(inferSvc *fusioninferiov1alpha1.InferenceService) *appsv
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
 			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
+				MatchLabels: selectorLabels,
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels: selectorLabels,
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: deploymentName,
