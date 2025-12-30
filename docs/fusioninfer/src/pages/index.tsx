@@ -10,6 +10,17 @@ function HomepageHeader() {
   return (
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
+        <img
+          src="img/fusioninfer-logo.jpeg"
+          alt="FusionInfer Logo"
+          style={{
+            width: '180px',
+            height: '180px',
+            borderRadius: '16px',
+            marginBottom: '1.5rem',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+          }}
+        />
         <Heading as="h1" className="hero__title">
           {siteConfig.title}
         </Heading>
