@@ -411,6 +411,48 @@ The controller uses **LeaderWorkerSet (LWS)** for all deployments to provide uni
 | `fusioninfer.io/replica-index` | Replica index (only in per-replica mode) |
 | `fusioninfer.io/revision` | InferenceService generation for update detection |
 
+**Naming Convention:**
+
+The complete naming chain from InferenceService to Pods:
+
+```
+InferenceService: <service-name>
+         │
+         ▼ (Controller creates)
+LWS: <service>-<role>-<fusioninfer-replica>
+         │
+         ▼ (LWS creates)
+Pods:
+  ├── <lws-name>-<lws-replica>              (Leader, no worker suffix)
+  └── <lws-name>-<lws-replica>-<worker>     (Workers, index starts from 1)
+```
+
+| Resource | Naming Pattern | Example |
+|----------|----------------|---------|
+| LWS | `{service}-{role}-{replica}` | `qwen-inference-inference-0` |
+| Leader Pod | `{lws-name}-{lws-replica}` | `qwen-inference-inference-0-0` |
+| Worker Pod | `{lws-name}-{lws-replica}-{worker}` | `qwen-inference-inference-0-0-1` |
+
+> **Note**: The Leader pod does not have a worker index suffix. Worker pods have indices starting from 1.
+
+**Example: Pod Naming for Multi-Node Deployment**
+
+For an InferenceService named `deepseek-r1` with role `inference`, `replicas: 2`, and `nodeCount: 4`:
+
+```
+deepseek-r1-inference-0          (LWS for replica 0)
+  ├── deepseek-r1-inference-0-0      (Leader)
+  ├── deepseek-r1-inference-0-0-1    (Worker 1)
+  ├── deepseek-r1-inference-0-0-2    (Worker 2)
+  └── deepseek-r1-inference-0-0-3    (Worker 3)
+
+deepseek-r1-inference-1          (LWS for replica 1)
+  ├── deepseek-r1-inference-1-0      (Leader)
+  ├── deepseek-r1-inference-1-0-1    (Worker 1)
+  ├── deepseek-r1-inference-1-0-2    (Worker 2)
+  └── deepseek-r1-inference-1-0-3    (Worker 3)
+```
+
 **Example 1: Single-Node LWS**
 
 ```yaml

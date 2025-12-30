@@ -23,6 +23,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	lwsv1 "sigs.k8s.io/lws/api/leaderworkerset/v1"
 
@@ -117,7 +118,7 @@ func BuildLWS(inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninfer
 		},
 		Spec: lwsv1.LeaderWorkerSetSpec{
 			Replicas:      ptr.To(replicas),
-			StartupPolicy: lwsv1.LeaderCreatedStartupPolicy,
+			StartupPolicy: lwsv1.LeaderReadyStartupPolicy,
 			LeaderWorkerTemplate: lwsv1.LeaderWorkerTemplate{
 				Size: ptr.To(size),
 				WorkerTemplate: corev1.PodTemplateSpec{
@@ -203,6 +204,23 @@ func wrapContainerWithRay(container *corev1.Container, role fusioninferiov1alpha
 
 	// Ensure Ray head port is exposed
 	ensureRayHeadPort(container)
+
+	// Add readiness probe to check Ray head is ready
+	// This is used with LeaderReadyStartupPolicy to ensure workers wait for leader
+	if container.ReadinessProbe == nil {
+		container.ReadinessProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				TCPSocket: &corev1.TCPSocketAction{
+					Port: intstr.FromInt(RayHeadPort),
+				},
+			},
+			InitialDelaySeconds: 5,
+			PeriodSeconds:       5,
+			TimeoutSeconds:      3,
+			SuccessThreshold:    1,
+			FailureThreshold:    3,
+		}
+	}
 }
 
 // getGPUCount extracts the number of GPUs from container resource limits
