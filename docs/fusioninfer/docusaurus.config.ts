@@ -5,7 +5,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 const config: Config = {
   title: 'FusionInfer',
   tagline: 'A Kubernetes-native platform for orchestrating distributed LLM inference at scale',
-  favicon: 'img/favicon.ico',
+  favicon: 'img/fusioninfer-logo.jpeg',
 
   future: {
     v4: true,
@@ -55,12 +55,13 @@ const config: Config = {
   themes: ['@docusaurus/theme-mermaid'],
 
   themeConfig: {
-    image: 'img/fusioninfer-social-card.png',
+    image: 'img/fusioninfer-logo.jpeg',
     navbar: {
       title: 'FusionInfer',
       logo: {
         alt: 'FusionInfer Logo',
-        src: 'img/logo.svg',
+        src: 'img/fusioninfer-logo.jpeg',
+        style: { borderRadius: '8px' },
       },
       items: [
         {
