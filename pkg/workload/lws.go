@@ -118,7 +118,7 @@ func BuildLWS(inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninfer
 		},
 		Spec: lwsv1.LeaderWorkerSetSpec{
 			Replicas:      ptr.To(replicas),
-			StartupPolicy: lwsv1.LeaderReadyStartupPolicy,
+			StartupPolicy: lwsv1.LeaderCreatedStartupPolicy,
 			LeaderWorkerTemplate: lwsv1.LeaderWorkerTemplate{
 				Size: ptr.To(size),
 				WorkerTemplate: corev1.PodTemplateSpec{
@@ -155,9 +155,52 @@ func buildPodSpec(role fusioninferiov1alpha1.Role, needsGangScheduling bool, isM
 	// Wrap command with ray symmetric-run for multi-node deployments
 	if isMultiNode && len(spec.Containers) > 0 {
 		wrapContainerWithRay(&spec.Containers[0], role)
+		// Add init container for workers to wait for leader's Ray head
+		addWaitForLeaderInitContainer(&spec)
 	}
 
 	return spec
+}
+
+// addWaitForLeaderInitContainer adds an init container that waits for the Ray head to be ready
+// This is only active for worker pods (LWS_WORKER_INDEX != 0)
+func addWaitForLeaderInitContainer(spec *corev1.PodSpec) {
+	if len(spec.Containers) == 0 {
+		return
+	}
+
+	// Use the same image as the main container
+	mainImage := spec.Containers[0].Image
+
+	initContainer := corev1.Container{
+		Name:    "wait-for-ray-head",
+		Image:   mainImage,
+		Command: []string{"/bin/bash", "-c"},
+		Args: []string{
+			// Only wait if this is a worker pod (LWS_WORKER_INDEX != 0)
+			// Leader pod (index 0) skips this check
+			fmt.Sprintf(`if [ "$LWS_WORKER_INDEX" != "0" ]; then
+  echo "Worker node (index=$LWS_WORKER_INDEX). Waiting for Ray head at $LWS_LEADER_ADDRESS:%d..."
+  until python3 -c "
+import socket
+import os
+addr = os.environ['LWS_LEADER_ADDRESS']
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.settimeout(2)
+s.connect((addr, %d))
+s.close()
+" 2>/dev/null; do
+    echo "Ray head not ready, retrying in 2s..."
+    sleep 2
+  done
+  echo "Ray head is ready!"
+else
+  echo "Leader node (index=0). Skipping wait."
+fi`, RayHeadPort, RayHeadPort),
+		},
+	}
+
+	spec.InitContainers = append(spec.InitContainers, initContainer)
 }
 
 // wrapContainerWithRay wraps the container command with ray symmetric-run for distributed inference
