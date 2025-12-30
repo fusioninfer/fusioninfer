@@ -179,14 +179,21 @@ func addWaitForLeaderInitContainer(spec *corev1.PodSpec) {
 		Args: []string{
 			// Only wait if this is a worker pod (LWS_WORKER_INDEX != 0)
 			// Leader pod (index 0) skips this check
-			// Use ray.init() to verify head is fully ready
+			// Use GCS client to check if Ray head is ready (lightweight check, no session creation)
 			fmt.Sprintf(`if [ "$LWS_WORKER_INDEX" != "0" ]; then
-  echo "Worker node (index=$LWS_WORKER_INDEX). Waiting for Ray head at $LWS_LEADER_ADDRESS:%d..."
-  until python3 -c "import ray; import os; ray.init(address=f\"{os.environ['LWS_LEADER_ADDRESS']}:%d\"); ray.shutdown()"; do
-    echo "Ray head not ready, retrying in 3s..."
+  echo "Worker node (index=$LWS_WORKER_INDEX). Waiting for Ray GCS at $LWS_LEADER_ADDRESS:%d..."
+  until python3 -c "
+from ray._private.gcs_utils import GcsClient
+import os
+addr = os.environ['LWS_LEADER_ADDRESS']
+client = GcsClient(address=f'{addr}:%d', nums_reconnect_retry=0)
+client.check_alive([], timeout=5)
+print('GCS check passed')
+" 2>&1; do
+    echo "Ray GCS not ready, retrying in 3s..."
     sleep 3
   done
-  echo "Ray head is ready!"
+  echo "Ray GCS is ready!"
 else
   echo "Leader node (index=0). Skipping wait."
 fi`, RayHeadPort, RayHeadPort),
