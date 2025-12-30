@@ -179,19 +179,12 @@ func addWaitForLeaderInitContainer(spec *corev1.PodSpec) {
 		Args: []string{
 			// Only wait if this is a worker pod (LWS_WORKER_INDEX != 0)
 			// Leader pod (index 0) skips this check
+			// Use ray.init() to verify head is fully ready
 			fmt.Sprintf(`if [ "$LWS_WORKER_INDEX" != "0" ]; then
   echo "Worker node (index=$LWS_WORKER_INDEX). Waiting for Ray head at $LWS_LEADER_ADDRESS:%d..."
-  until python3 -c "
-import socket
-import os
-addr = os.environ['LWS_LEADER_ADDRESS']
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.settimeout(2)
-s.connect((addr, %d))
-s.close()
-" 2>/dev/null; do
-    echo "Ray head not ready, retrying in 2s..."
-    sleep 2
+  until python3 -c "import ray; import os; ray.init(address=f\"{os.environ['LWS_LEADER_ADDRESS']}:%d\"); ray.shutdown()" 2>/dev/null; do
+    echo "Ray head not ready, retrying in 3s..."
+    sleep 3
   done
   echo "Ray head is ready!"
 else
