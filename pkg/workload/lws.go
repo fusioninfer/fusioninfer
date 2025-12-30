@@ -182,7 +182,7 @@ func addWaitForLeaderInitContainer(spec *corev1.PodSpec) {
 			// Use ray.init() to verify head is fully ready
 			fmt.Sprintf(`if [ "$LWS_WORKER_INDEX" != "0" ]; then
   echo "Worker node (index=$LWS_WORKER_INDEX). Waiting for Ray head at $LWS_LEADER_ADDRESS:%d..."
-  until python3 -c "import ray; import os; ray.init(address=f\"{os.environ['LWS_LEADER_ADDRESS']}:%d\"); ray.shutdown()" 2>/dev/null; do
+  until python3 -c "import ray; import os; ray.init(address=f\"{os.environ['LWS_LEADER_ADDRESS']}:%d\"); ray.shutdown()"; do
     echo "Ray head not ready, retrying in 3s..."
     sleep 3
   done
