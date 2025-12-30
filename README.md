@@ -1,6 +1,6 @@
 # FusionInfer
 
-![](./docs/fusioninfer/static/img/fusioninfer.jpeg)
+![](./docs/fusioninfer/static/img/fusioninfer.png)
 
 A Kubernetes controller for unified LLM inference orchestration, supporting both monolithic and prefill/decode (PD) disaggregated serving topologies.
 
