@@ -70,7 +70,10 @@ func NeedsGangScheduling(inferSvc *fusioninferiov1alpha1.InferenceService) bool 
 }
 
 // NeedsGangSchedulingForRole returns true if the specific role requires gang scheduling
-func NeedsGangSchedulingForRole(inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninferiov1alpha1.Role) bool {
+func NeedsGangSchedulingForRole(
+	inferSvc *fusioninferiov1alpha1.InferenceService,
+	role fusioninferiov1alpha1.Role,
+) bool {
 	// PD disaggregated: prefiller and decoder need gang scheduling
 	if IsPDDisaggregated(inferSvc) {
 		return role.ComponentType == fusioninferiov1alpha1.ComponentTypePrefiller ||

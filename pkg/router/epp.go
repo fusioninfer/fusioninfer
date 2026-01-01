@@ -55,7 +55,10 @@ func GetEPPImage() string {
 }
 
 // BuildEPPConfigMap constructs the ConfigMap containing EndpointPickerConfig
-func BuildEPPConfigMap(inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninferiov1alpha1.Role) *corev1.ConfigMap {
+func BuildEPPConfigMap(
+	inferSvc *fusioninferiov1alpha1.InferenceService,
+	role fusioninferiov1alpha1.Role,
+) *corev1.ConfigMap {
 	configMapName := GenerateEPPConfigMapName(inferSvc.Name)
 	configYAML := GenerateEPPConfig(inferSvc, role)
 

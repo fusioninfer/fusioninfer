@@ -39,5 +39,6 @@ func ComputeSpecHash(obj interface{}) string {
 // ensuring the hash does not change when a pointer changes.
 func deepHashObject(hasher hash.Hash, objectToWrite interface{}) {
 	hasher.Reset()
+	//nolint:errcheck // hash.Hash.Write() never returns an error per interface contract
 	fmt.Fprintf(hasher, "%v", dump.ForHash(objectToWrite))
 }

@@ -68,9 +68,13 @@ type LWSConfig struct {
 	ReplicaIndex *int32
 }
 
-// BuildLWS constructs a LeaderWorkerSet for the given role
-// If config.ReplicaIndex is set, creates a per-replica LWS with replicas=1
-func BuildLWS(inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninferiov1alpha1.Role, config LWSConfig) *lwsv1.LeaderWorkerSet {
+// BuildLWS constructs a LeaderWorkerSet for the given role.
+// If config.ReplicaIndex is set, creates a per-replica LWS with replicas=1.
+func BuildLWS(
+	inferSvc *fusioninferiov1alpha1.InferenceService,
+	role fusioninferiov1alpha1.Role,
+	config LWSConfig,
+) *lwsv1.LeaderWorkerSet {
 	// Generate LWS name (includes replica index for per-replica mode)
 	lwsName := GenerateLWSNameWithIndex(inferSvc.Name, role.Name, config.ReplicaIndex)
 
@@ -263,13 +267,4 @@ func GenerateLWSNameWithIndex(inferSvcName, roleName string, replicaIndex *int32
 // IsMultiNode returns true if the role is configured for multi-node deployment
 func IsMultiNode(role fusioninferiov1alpha1.Role) bool {
 	return role.Multinode != nil && role.Multinode.NodeCount >= 2
-}
-
-// getNodeCount returns the node count for a role, defaulting to 1
-// This is a local helper; for external use, call scheduling.GetNodeCount()
-func getNodeCount(role fusioninferiov1alpha1.Role) int32 {
-	if role.Multinode != nil && role.Multinode.NodeCount >= 1 {
-		return role.Multinode.NodeCount
-	}
-	return 1
 }

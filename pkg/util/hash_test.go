@@ -424,7 +424,11 @@ func TestComputeSpecHash_SafeEncoding(t *testing.T) {
 
 	// SafeEncodeString should produce alphanumeric + '-' + '_' characters
 	for _, c := range hash {
-		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_') {
+		isLower := c >= 'a' && c <= 'z'
+		isUpper := c >= 'A' && c <= 'Z'
+		isDigit := c >= '0' && c <= '9'
+		isSafe := c == '-' || c == '_'
+		if !isLower && !isUpper && !isDigit && !isSafe {
 			t.Errorf("hash contains non-safe character: %c in %s", c, hash)
 		}
 	}

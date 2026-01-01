@@ -34,7 +34,10 @@ const (
 )
 
 // BuildHTTPRoute constructs an HTTPRoute that routes traffic to the InferencePool
-func BuildHTTPRoute(inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninferiov1alpha1.Role) *gatewayv1.HTTPRoute {
+func BuildHTTPRoute(
+	inferSvc *fusioninferiov1alpha1.InferenceService,
+	role fusioninferiov1alpha1.Role,
+) *gatewayv1.HTTPRoute {
 	routeName := GenerateHTTPRouteName(inferSvc.Name)
 	poolName := GeneratePoolName(inferSvc.Name)
 

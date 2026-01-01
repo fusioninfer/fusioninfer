@@ -45,8 +45,9 @@ func createTemplateRaw(template corev1.PodTemplateSpec) *runtime.RawExtension {
 	return &runtime.RawExtension{Raw: data}
 }
 
-// createTestInferenceService creates a basic InferenceService for testing
-func createTestInferenceService(name, namespace, image string, replicas int32) *fusioninferiov1alpha1.InferenceService {
+// createTestInferenceService creates a basic InferenceService for testing.
+// The namespace parameter is kept for flexibility even though tests currently use "default".
+func createTestInferenceService(name, namespace, image string, replicas int32) *fusioninferiov1alpha1.InferenceService { //nolint:unparam
 	template := corev1.PodTemplateSpec{
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
