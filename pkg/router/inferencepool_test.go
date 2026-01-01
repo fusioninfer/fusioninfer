@@ -164,4 +164,3 @@ func TestGenerateHTTPRouteName(t *testing.T) {
 		})
 	}
 }
-
