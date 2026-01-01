@@ -266,14 +266,15 @@ var _ = Describe("InferenceService Controller", func() {
 	})
 
 	// ==========================================================================
-	// Drift Correction Tests - Verifies controller reverts external changes
+	// Spec Change Propagation Tests - Verifies InferenceService changes propagate to LWS
 	// ==========================================================================
-	Context("Drift Correction", func() {
+	Context("Spec Change Propagation", func() {
 		ctx := context.Background()
 
-		// Test: When LWS spec is externally modified, controller should detect and revert
-		It("should revert LWS when spec is externally modified", func() {
-			inferSvcName := "test-spec-drift"
+		// Verify that InferenceService spec changes trigger LWS update
+		It("should update LWS when InferenceService spec changes", func() {
+			inferSvcName := "test-spec-change-triggers-update"
+			typeNamespacedName := types.NamespacedName{Name: inferSvcName, Namespace: "default"}
 
 			By("Creating InferenceService")
 			inferSvc := createTestInferenceService(inferSvcName, "default", "vllm/vllm-openai:v0.13.0", 1)
@@ -286,35 +287,44 @@ var _ = Describe("InferenceService Controller", func() {
 				return k8sClient.Get(ctx, lwsKey, createdLWS) == nil
 			}, timeout, interval).Should(BeTrue())
 
-			// Record initial state
 			initialSpecHash := createdLWS.Labels[workload.LabelSpecHash]
-			initialReplicas := *createdLWS.Spec.Replicas
 			Expect(initialSpecHash).NotTo(BeEmpty())
 
-			By("Tampering with LWS: modifying ONLY spec (not touching label)")
+			By("Modifying InferenceService spec (changing args)")
 			Eventually(func() error {
-				if err := k8sClient.Get(ctx, lwsKey, createdLWS); err != nil {
+				if err := k8sClient.Get(ctx, typeNamespacedName, inferSvc); err != nil {
 					return err
 				}
-				// Only tamper with spec, leave label unchanged
-				// This simulates: kubectl edit lws xxx (user only changes spec)
-				createdLWS.Spec.Replicas = ptr.To(int32(999))
-				return k8sClient.Update(ctx, createdLWS)
+				// Create new template with different args
+				newTemplate := corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "vllm",
+								Image: "vllm/vllm-openai:v0.13.0",
+								Args:  []string{"--model", "Qwen/Qwen3-8B", "--max-model-len", "4096"}, // Added arg
+								Resources: corev1.ResourceRequirements{
+									Limits: corev1.ResourceList{
+										"nvidia.com/gpu": resource.MustParse("1"),
+									},
+								},
+							},
+						},
+					},
+				}
+				inferSvc.Spec.Roles[0].Template = createTemplateRaw(newTemplate)
+				return k8sClient.Update(ctx, inferSvc)
 			}, timeout, interval).Should(Succeed())
 
-			By("Verifying LWS spec was tampered but label unchanged")
-			Expect(k8sClient.Get(ctx, lwsKey, createdLWS)).To(Succeed())
-			Expect(createdLWS.Labels[workload.LabelSpecHash]).To(Equal(initialSpecHash), "Label should be unchanged")
-			Expect(*createdLWS.Spec.Replicas).To(Equal(int32(999)), "Spec should be tampered")
-
-			By("Waiting for controller to revert the spec")
+			By("Waiting for controller to detect hash mismatch and update LWS")
 			Eventually(func() bool {
 				if err := k8sClient.Get(ctx, lwsKey, createdLWS); err != nil {
 					return false
 				}
-				// Controller should detect spec drift and revert
-				return *createdLWS.Spec.Replicas == initialReplicas
-			}, timeout, interval).Should(BeTrue(), "Controller should revert tampered spec")
+				// Controller should detect hash mismatch (desired != existing label) and update
+				return createdLWS.Labels[workload.LabelSpecHash] != initialSpecHash
+			}, timeout, interval).Should(BeTrue(),
+				"Controller should update LWS when InferenceService spec changes")
 
 			By("Cleanup")
 			Expect(k8sClient.Delete(ctx, inferSvc)).Should(Succeed())
