@@ -19,10 +19,11 @@ package workload
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	lwsv1 "sigs.k8s.io/lws/api/leaderworkerset/v1"
 
@@ -94,7 +95,7 @@ func BuildLWS(inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninfer
 
 	// Add replica index label for per-replica mode
 	if config.ReplicaIndex != nil {
-		labels[LabelReplicaIndex] = strconv.Itoa(int(*config.ReplicaIndex))
+		labels[LabelReplicaIndex] = fmt.Sprintf("%d", *config.ReplicaIndex)
 	}
 
 	// Build annotations for gang scheduling
@@ -106,8 +107,9 @@ func BuildLWS(inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninfer
 		}
 	}
 
-	// Build pod spec with optional ray command wrapping for multi-node
-	podSpec := buildPodSpec(role, config.NeedsGangScheduling, IsMultiNode(role))
+	// Build pod specs
+	isMultiNode := IsMultiNode(role)
+	workerPodSpec := buildPodSpec(role, config.NeedsGangScheduling)
 
 	lws := &lwsv1.LeaderWorkerSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -125,17 +127,32 @@ func BuildLWS(inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninfer
 						Labels:      labels,
 						Annotations: annotations,
 					},
-					Spec: podSpec,
+					Spec: workerPodSpec,
 				},
 			},
 		},
+	}
+
+	// For multi-node deployments, use separate LeaderTemplate and WorkerTemplate
+	if isMultiNode {
+		leaderPodSpec := buildPodSpec(role, config.NeedsGangScheduling)
+		wrapLeaderContainer(&leaderPodSpec.Containers[0])
+		wrapWorkerContainer(&lws.Spec.LeaderWorkerTemplate.WorkerTemplate.Spec.Containers[0])
+
+		lws.Spec.LeaderWorkerTemplate.LeaderTemplate = &corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels:      labels,
+				Annotations: annotations,
+			},
+			Spec: leaderPodSpec,
+		}
 	}
 
 	return lws
 }
 
 // buildPodSpec constructs the pod spec from the role template
-func buildPodSpec(role fusioninferiov1alpha1.Role, needsGangScheduling bool, isMultiNode bool) corev1.PodSpec {
+func buildPodSpec(role fusioninferiov1alpha1.Role, needsGangScheduling bool) corev1.PodSpec {
 	var spec corev1.PodSpec
 
 	// Parse PodTemplateSpec from RawExtension
@@ -151,83 +168,68 @@ func buildPodSpec(role fusioninferiov1alpha1.Role, needsGangScheduling bool, isM
 		spec.SchedulerName = VolcanoSchedulerName
 	}
 
-	// Wrap command with ray symmetric-run for multi-node deployments
-	if isMultiNode && len(spec.Containers) > 0 {
-		wrapContainerWithRay(&spec.Containers[0], role)
-	}
-
 	return spec
 }
 
-// wrapContainerWithRay wraps the container command with ray symmetric-run for distributed inference
-// This enables multi-node tensor parallelism using Ray's distributed execution
-func wrapContainerWithRay(container *corev1.Container, role fusioninferiov1alpha1.Role) {
-	nodeCount := getNodeCount(role)
-	numGPUs := getGPUCount(container)
+// wrapLeaderContainer wraps the leader container with Ray head + vLLM command
+// Leader: ray start --head && <original command> --distributed-executor-backend ray
+func wrapLeaderContainer(container *corev1.Container) {
+	originalCmd := strings.Join(container.Command, " ")
+	originalArgs := strings.Join(container.Args, " ")
 
-	// Build the original command/args
-	originalCmd := container.Command
-	originalArgs := container.Args
-
-	// Construct ray symmetric-run command
-	// Format: ray symmetric-run --address $(LWS_LEADER_ADDRESS):6379 --min-nodes N --num-gpus G -- <original_cmd> <original_args>
-	rayArgs := []string{
-		"symmetric-run",
-		"--address",
-		fmt.Sprintf("$(%s):%d", LWSLeaderAddressEnv, RayHeadPort),
-		"--min-nodes",
-		strconv.Itoa(int(nodeCount)),
+	// If no command specified, use default vLLM serve command
+	// This handles vllm-openai images where only args are provided
+	if originalCmd == "" {
+		originalCmd = "vllm serve"
 	}
 
-	// Add num-gpus if available
-	if numGPUs > 0 {
-		rayArgs = append(rayArgs, "--num-gpus", strconv.Itoa(numGPUs))
+	// Check if --distributed-executor-backend is already specified
+	hasBackendFlag := strings.Contains(originalArgs, "distributed-executor-backend")
+	vllmMultinodeFlags := ""
+	if !hasBackendFlag {
+		vllmMultinodeFlags = "--distributed-executor-backend ray"
 	}
 
-	// Add separator and original command/args
-	rayArgs = append(rayArgs, "--")
+	// Leader command: ray start --head && vllm serve ...
+	leaderCmd := fmt.Sprintf("ray start --head --port=%d && %s %s %s",
+		RayHeadPort, originalCmd, originalArgs, vllmMultinodeFlags)
 
-	// Append original command if exists
-	if len(originalCmd) > 0 {
-		rayArgs = append(rayArgs, originalCmd...)
-	}
-
-	// Append original args
-	if len(originalArgs) > 0 {
-		rayArgs = append(rayArgs, originalArgs...)
-	}
-
-	// Set new command and args
-	container.Command = []string{"ray"}
-	container.Args = rayArgs
-
-	// Ensure Ray head port is exposed
-	ensureRayHeadPort(container)
-}
-
-// getGPUCount extracts the number of GPUs from container resource limits
-func getGPUCount(container *corev1.Container) int {
-	if container.Resources.Limits == nil {
-		return 0
-	}
-
-	gpuResource := container.Resources.Limits[corev1.ResourceName("nvidia.com/gpu")]
-	if gpuResource.IsZero() {
-		return 0
-	}
-
-	return int(gpuResource.Value())
-}
-
-// ensureRayHeadPort ensures the Ray head port is exposed in the container
-func ensureRayHeadPort(container *corev1.Container) {
-	for _, port := range container.Ports {
-		if port.ContainerPort == RayHeadPort {
-			return // Already exposed
-		}
-	}
+	container.Command = []string{"/bin/sh", "-c"}
+	container.Args = []string{leaderCmd}
 
 	// Add Ray head port
+	addRayHeadPort(container)
+
+	// Add readiness probe for leader
+	if container.ReadinessProbe == nil {
+		container.ReadinessProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				TCPSocket: &corev1.TCPSocketAction{
+					Port: intstr.FromInt(RayHeadPort),
+				},
+			},
+			InitialDelaySeconds: 10,
+			PeriodSeconds:       10,
+			TimeoutSeconds:      5,
+			SuccessThreshold:    1,
+			FailureThreshold:    6,
+		}
+	}
+}
+
+// wrapWorkerContainer wraps the worker container with Ray worker command
+// Worker: ray start --address=<leader>:6379 --block
+func wrapWorkerContainer(container *corev1.Container) {
+	// Worker command: ray start --address --block
+	workerCmd := fmt.Sprintf("ray start --address=$%s:%d --block",
+		LWSLeaderAddressEnv, RayHeadPort)
+
+	container.Command = []string{"/bin/sh", "-c"}
+	container.Args = []string{workerCmd}
+}
+
+// addRayHeadPort adds the Ray head port to the container
+func addRayHeadPort(container *corev1.Container) {
 	container.Ports = append(container.Ports, corev1.ContainerPort{
 		Name:          "ray-head",
 		ContainerPort: RayHeadPort,

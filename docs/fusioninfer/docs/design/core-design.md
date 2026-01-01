@@ -411,6 +411,48 @@ The controller uses **LeaderWorkerSet (LWS)** for all deployments to provide uni
 | `fusioninfer.io/replica-index` | Replica index (only in per-replica mode) |
 | `fusioninfer.io/revision` | InferenceService generation for update detection |
 
+**Naming Convention:**
+
+The complete naming chain from InferenceService to Pods:
+
+```
+InferenceService: <service-name>
+         │
+         ▼ (Controller creates)
+LWS: <service>-<role>-<fusioninfer-replica>
+         │
+         ▼ (LWS creates)
+Pods:
+  ├── <lws-name>-<lws-replica>              (Leader, no worker suffix)
+  └── <lws-name>-<lws-replica>-<worker>     (Workers, index starts from 1)
+```
+
+| Resource | Naming Pattern | Example |
+|----------|----------------|---------|
+| LWS | `{service}-{role}-{replica}` | `qwen-inference-inference-0` |
+| Leader Pod | `{lws-name}-{lws-replica}` | `qwen-inference-inference-0-0` |
+| Worker Pod | `{lws-name}-{lws-replica}-{worker}` | `qwen-inference-inference-0-0-1` |
+
+> **Note**: The Leader pod does not have a worker index suffix. Worker pods have indices starting from 1.
+
+**Example: Pod Naming for Multi-Node Deployment**
+
+For an InferenceService named `deepseek-r1` with role `inference`, `replicas: 2`, and `nodeCount: 4`:
+
+```
+deepseek-r1-inference-0          (LWS for replica 0)
+  ├── deepseek-r1-inference-0-0      (Leader)
+  ├── deepseek-r1-inference-0-0-1    (Worker 1)
+  ├── deepseek-r1-inference-0-0-2    (Worker 2)
+  └── deepseek-r1-inference-0-0-3    (Worker 3)
+
+deepseek-r1-inference-1          (LWS for replica 1)
+  ├── deepseek-r1-inference-1-0      (Leader)
+  ├── deepseek-r1-inference-1-0-1    (Worker 1)
+  ├── deepseek-r1-inference-1-0-2    (Worker 2)
+  └── deepseek-r1-inference-1-0-3    (Worker 3)
+```
+
 **Example 1: Single-Node LWS**
 
 ```yaml
@@ -482,42 +524,52 @@ spec:
   replicas: 1                         # Always 1 in per-replica mode
   leaderWorkerTemplate:
     size: 4                           # 4 pods per replica
-    workerTemplate:
+    # LeaderTemplate: Leader starts Ray head and runs vLLM
+    leaderTemplate:
       metadata:
         labels:
           fusioninfer.io/replica-index: "0"
         annotations:
-          scheduling.k8s.io/group-name: deepseek-r1-inference  # Shared PodGroup
-          volcano.sh/task-spec: inference-0                    # Task: {roleName}-{replicaIndex}
+          scheduling.k8s.io/group-name: deepseek-r1-inference
+          volcano.sh/task-spec: inference-0
       spec:
         schedulerName: volcano
         containers:
           - name: vllm
             image: vllm/vllm-openai:v0.11.0
-            command: ["ray"]
+            command: ["/bin/sh", "-c"]
             args:
-              - "symmetric-run"
-              - "--address"
-              - "$(LWS_LEADER_ADDRESS):6379"
-              - "--min-nodes"
-              - "4"
-              - "--num-gpus"
-              - "8"
-              - "--"
-              - "vllm"
-              - "serve"
-              - "deepseek-ai/DeepSeek-R1"
-              - "--tensor-parallel-size"
-              - "32"
+              - "ray start --head --port=6379 && vllm serve deepseek-ai/DeepSeek-R1 --tensor-parallel-size 32 --distributed-executor-backend ray"
             ports:
               - containerPort: 8000
               - containerPort: 6379
             resources:
               limits:
                 nvidia.com/gpu: "8"
+    # WorkerTemplate: Workers join Ray cluster
+    workerTemplate:
+      metadata:
+        labels:
+          fusioninfer.io/replica-index: "0"
+        annotations:
+          scheduling.k8s.io/group-name: deepseek-r1-inference
+          volcano.sh/task-spec: inference-0
+      spec:
+        schedulerName: volcano
+        containers:
+          - name: vllm
+            image: vllm/vllm-openai:v0.11.0
+            command: ["/bin/sh", "-c"]
+            args:
+              - "ray start --address=$LWS_LEADER_ADDRESS:6379 --block"
+            resources:
+              limits:
+                nvidia.com/gpu: "8"
 ```
 
-> **Note**: The `ray symmetric-run` command is automatically injected by the Controller for multi-node deployments. It wraps the original container command to enable distributed execution via Ray.
+> **Note**: For multi-node deployments, the Controller automatically generates separate `leaderTemplate` and `workerTemplate`:
+> - **Leader**: `ray start --head && <original command> --distributed-executor-backend ray`
+> - **Worker**: `ray start --address=$LWS_LEADER_ADDRESS:6379 --block`
 
 ### Gang Scheduling Behavior
 

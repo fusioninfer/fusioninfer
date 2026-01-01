@@ -31,6 +31,8 @@ const (
 	DefaultTargetPort = 8000
 	// Default EPP gRPC port
 	DefaultEPPPort = 9002
+	// LWS worker index label - leader pod always has index "0"
+	LWSWorkerIndexLabel = "leaderworkerset.sigs.k8s.io/worker-index"
 )
 
 // BuildInferencePool constructs an InferencePool that selects worker pods
@@ -80,6 +82,11 @@ func buildPoolSelector(inferSvc *fusioninferiov1alpha1.InferenceService, workerR
 	if len(workerRoles) == 1 {
 		matchLabels[inferenceapi.LabelKey(workload.LabelComponentType)] = inferenceapi.LabelValue(workerRoles[0].ComponentType)
 	}
+
+	// Only select leader pods (worker-index=0) for routing
+	// For single-node: the only pod has worker-index=0
+	// For multi-node: only the leader pod (with vLLM server) has worker-index=0
+	matchLabels[inferenceapi.LabelKey(LWSWorkerIndexLabel)] = "0"
 
 	return inferenceapi.LabelSelector{
 		MatchLabels: matchLabels,
