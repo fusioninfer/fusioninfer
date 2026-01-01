@@ -271,10 +271,9 @@ var _ = Describe("InferenceService Controller", func() {
 	Context("Drift Correction", func() {
 		ctx := context.Background()
 
-		// Test: When LWS spec-hash label is tampered, controller should detect and revert
-		// This verifies the hash-based drift detection mechanism
-		It("should revert LWS when spec-hash label is tampered", func() {
-			inferSvcName := "test-drift-correction"
+		// Test: When LWS spec is externally modified, controller should detect and revert
+		It("should revert LWS when spec is externally modified", func() {
+			inferSvcName := "test-spec-drift"
 
 			By("Creating InferenceService")
 			inferSvc := createTestInferenceService(inferSvcName, "default", "vllm/vllm-openai:v0.13.0", 1)
@@ -292,32 +291,30 @@ var _ = Describe("InferenceService Controller", func() {
 			initialReplicas := *createdLWS.Spec.Replicas
 			Expect(initialSpecHash).NotTo(BeEmpty())
 
-			By("Tampering with LWS: modifying spec-hash label AND spec")
+			By("Tampering with LWS: modifying ONLY spec (not touching label)")
 			Eventually(func() error {
 				if err := k8sClient.Get(ctx, lwsKey, createdLWS); err != nil {
 					return err
 				}
-				// Tamper with the spec-hash label (this triggers drift detection)
-				createdLWS.Labels[workload.LabelSpecHash] = "tampered-hash"
-				// Also tamper with spec to verify it gets reverted
+				// Only tamper with spec, leave label unchanged
+				// This simulates: kubectl edit lws xxx (user only changes spec)
 				createdLWS.Spec.Replicas = ptr.To(int32(999))
 				return k8sClient.Update(ctx, createdLWS)
 			}, timeout, interval).Should(Succeed())
 
-			By("Verifying LWS was tampered")
+			By("Verifying LWS spec was tampered but label unchanged")
 			Expect(k8sClient.Get(ctx, lwsKey, createdLWS)).To(Succeed())
-			Expect(createdLWS.Labels[workload.LabelSpecHash]).To(Equal("tampered-hash"))
-			Expect(*createdLWS.Spec.Replicas).To(Equal(int32(999)))
+			Expect(createdLWS.Labels[workload.LabelSpecHash]).To(Equal(initialSpecHash), "Label should be unchanged")
+			Expect(*createdLWS.Spec.Replicas).To(Equal(int32(999)), "Spec should be tampered")
 
-			By("Waiting for controller to revert the changes")
+			By("Waiting for controller to revert the spec")
 			Eventually(func() bool {
 				if err := k8sClient.Get(ctx, lwsKey, createdLWS); err != nil {
 					return false
 				}
-				// Controller should have reverted both hash and spec
-				return createdLWS.Labels[workload.LabelSpecHash] == initialSpecHash &&
-					*createdLWS.Spec.Replicas == initialReplicas
-			}, timeout, interval).Should(BeTrue(), "Controller should revert tampered LWS")
+				// Controller should detect spec drift and revert
+				return *createdLWS.Spec.Replicas == initialReplicas
+			}, timeout, interval).Should(BeTrue(), "Controller should revert tampered spec")
 
 			By("Cleanup")
 			Expect(k8sClient.Delete(ctx, inferSvc)).Should(Succeed())

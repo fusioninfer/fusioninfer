@@ -39,6 +39,7 @@ import (
 	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/core/v1alpha1"
 	"github.com/fusioninfer/fusioninfer/pkg/router"
 	"github.com/fusioninfer/fusioninfer/pkg/scheduling"
+	"github.com/fusioninfer/fusioninfer/pkg/util"
 	"github.com/fusioninfer/fusioninfer/pkg/workload"
 )
 
@@ -183,8 +184,10 @@ func (r *InferenceServiceReconciler) reconcilePodGroup(ctx context.Context, infe
 		return err
 	}
 
-	// Update only if spec hash changed
-	if existingPG.Labels[workload.LabelSpecHash] != pg.Labels[workload.LabelSpecHash] {
+	// Update if desired or existing content changed (drift detection)
+	desiredHash := pg.Labels[workload.LabelSpecHash]
+	existingHash := util.ComputeSpecHash(existingPG.Spec)
+	if existingHash != desiredHash {
 		existingPG.Labels = pg.Labels
 		existingPG.Spec = pg.Spec
 		log.V(1).Info("Updating PodGroup", "name", pg.Name)
@@ -243,8 +246,10 @@ func (r *InferenceServiceReconciler) reconcileLWS(ctx context.Context, inferSvc 
 			return err
 		}
 
-		// Update only if spec hash changed
-		if existingLWS.Labels[workload.LabelSpecHash] != lws.Labels[workload.LabelSpecHash] {
+		// Update if desired or existing content changed (drift detection)
+		desiredHash := lws.Labels[workload.LabelSpecHash]
+		existingHash := util.ComputeSpecHash(existingLWS.Spec)
+		if existingHash != desiredHash {
 			existingLWS.Labels = lws.Labels
 			existingLWS.Spec = lws.Spec
 			log.V(1).Info("Updating LWS", "name", lws.Name, "role", role.Name, "replica", i)
@@ -378,8 +383,10 @@ func (r *InferenceServiceReconciler) reconcileEPPRole(ctx context.Context, infer
 		return err
 	}
 
-	// Update only if spec hash changed
-	if existing.Labels[workload.LabelSpecHash] != role.Labels[workload.LabelSpecHash] {
+	// Update if desired or existing content changed (drift detection)
+	desiredHash := role.Labels[workload.LabelSpecHash]
+	existingHash := util.ComputeSpecHash(existing.Rules)
+	if existingHash != desiredHash {
 		existing.Labels = role.Labels
 		existing.Rules = role.Rules
 		return r.Update(ctx, existing)
@@ -403,8 +410,13 @@ func (r *InferenceServiceReconciler) reconcileEPPRoleBinding(ctx context.Context
 		return err
 	}
 
-	// Update only if spec hash changed
-	if existing.Labels[workload.LabelSpecHash] != rb.Labels[workload.LabelSpecHash] {
+	// Update if desired or existing content changed (drift detection)
+	desiredHash := rb.Labels[workload.LabelSpecHash]
+	existingHash := util.ComputeSpecHash(struct {
+		RoleRef  rbacv1.RoleRef
+		Subjects []rbacv1.Subject
+	}{existing.RoleRef, existing.Subjects})
+	if existingHash != desiredHash {
 		existing.Labels = rb.Labels
 		existing.RoleRef = rb.RoleRef
 		existing.Subjects = rb.Subjects
@@ -429,8 +441,10 @@ func (r *InferenceServiceReconciler) reconcileEPPConfigMap(ctx context.Context, 
 		return err
 	}
 
-	// Update only if spec hash changed
-	if existing.Labels[workload.LabelSpecHash] != cm.Labels[workload.LabelSpecHash] {
+	// Update if desired or existing content changed (drift detection)
+	desiredHash := cm.Labels[workload.LabelSpecHash]
+	existingHash := util.ComputeSpecHash(existing.Data)
+	if existingHash != desiredHash {
 		existing.Labels = cm.Labels
 		existing.Data = cm.Data
 		return r.Update(ctx, existing)
@@ -454,8 +468,10 @@ func (r *InferenceServiceReconciler) reconcileEPPDeployment(ctx context.Context,
 		return err
 	}
 
-	// Update only if spec hash changed (only update mutable fields)
-	if existing.Labels[workload.LabelSpecHash] != deploy.Labels[workload.LabelSpecHash] {
+	// Update if desired or existing content changed (drift detection)
+	desiredHash := deploy.Labels[workload.LabelSpecHash]
+	existingHash := util.ComputeSpecHash(existing.Spec)
+	if existingHash != desiredHash {
 		existing.Labels = deploy.Labels
 		// Don't update spec.selector as it's immutable
 		existing.Spec.Template = deploy.Spec.Template
@@ -482,8 +498,10 @@ func (r *InferenceServiceReconciler) reconcileEPPService(ctx context.Context, in
 		return err
 	}
 
-	// Update only if spec hash changed
-	if existing.Labels[workload.LabelSpecHash] != svc.Labels[workload.LabelSpecHash] {
+	// Update if desired or existing content changed (drift detection)
+	desiredHash := svc.Labels[workload.LabelSpecHash]
+	existingHash := util.ComputeSpecHash(existing.Spec)
+	if existingHash != desiredHash {
 		existing.Labels = svc.Labels
 		existing.Spec.Ports = svc.Spec.Ports
 		existing.Spec.Selector = svc.Spec.Selector
@@ -508,8 +526,12 @@ func (r *InferenceServiceReconciler) reconcileInferencePool(ctx context.Context,
 		return err
 	}
 
-	// Update only if spec hash changed
-	if existing.Labels[workload.LabelSpecHash] != pool.Labels[workload.LabelSpecHash] {
+	// Update if:
+	// 1. Desired spec hash changed (InferenceService spec changed), OR
+	// 2. Existing spec was externally modified (drift detection)
+	desiredHash := pool.Labels[workload.LabelSpecHash]
+	existingSpecHash := util.ComputeSpecHash(existing.Spec)
+	if existingSpecHash != desiredHash {
 		existing.Labels = pool.Labels
 		existing.Spec = pool.Spec
 		return r.Update(ctx, existing)
@@ -533,8 +555,10 @@ func (r *InferenceServiceReconciler) reconcileHTTPRoute(ctx context.Context, inf
 		return err
 	}
 
-	// Update only if spec hash changed
-	if existing.Labels[workload.LabelSpecHash] != httpRoute.Labels[workload.LabelSpecHash] {
+	// Update if desired or existing content changed (drift detection)
+	desiredHash := httpRoute.Labels[workload.LabelSpecHash]
+	existingHash := util.ComputeSpecHash(existing.Spec)
+	if existingHash != desiredHash {
 		existing.Labels = httpRoute.Labels
 		existing.Spec = httpRoute.Spec
 		return r.Update(ctx, existing)
