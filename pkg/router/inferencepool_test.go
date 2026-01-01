@@ -80,6 +80,15 @@ func TestBuildInferencePool(t *testing.T) {
 	if _, ok := pool.Spec.Selector.MatchLabels[inferenceapi.LabelKey(workload.LabelService)]; !ok {
 		t.Error("expected selector to include service label")
 	}
+
+	// Verify selector includes worker-index=0 to select only leader pods
+	workerIndexValue, ok := pool.Spec.Selector.MatchLabels[inferenceapi.LabelKey(LWSWorkerIndexLabel)]
+	if !ok {
+		t.Error("expected selector to include LWS worker-index label")
+	}
+	if string(workerIndexValue) != "0" {
+		t.Errorf("expected worker-index=0, got %s", workerIndexValue)
+	}
 }
 
 func TestBuildInferencePoolWithSingleWorkerRole(t *testing.T) {
