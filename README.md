@@ -16,9 +16,13 @@ FusionInfer provides a single `InferenceService` CRD that enables:
 
 ## Demo
 
-Prefix cache aware routing example:
+## Prefix Cache Aware Routing
 
 https://github.com/user-attachments/assets/1743bf67-2abd-42cd-a0f3-d7b65281f8cb
+
+## Multi-Node Inference
+
+https://github.com/user-attachments/assets/0c7d2126-5e71-44b7-b1ed-7ac29de7b045
 
 ## Architecture
 
