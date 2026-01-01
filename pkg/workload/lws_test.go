@@ -18,12 +18,13 @@ package workload
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 
 	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/core/v1alpha1"
@@ -116,12 +117,8 @@ func TestBuildLWS(t *testing.T) {
 					Containers: []corev1.Container{
 						{
 							Name:  "vllm",
-							Image: "vllm/vllm:latest",
-							Resources: corev1.ResourceRequirements{
-								Limits: corev1.ResourceList{
-									"nvidia.com/gpu": resource.MustParse("8"),
-								},
-							},
+							Image: "vllm/vllm-openai:v0.13.0",
+							Args:  []string{"--model", "Qwen/Qwen3-8B"},
 						},
 					},
 				},
@@ -155,13 +152,23 @@ func TestBuildLWS(t *testing.T) {
 			t.Errorf("expected scheduler %s, got %s", VolcanoSchedulerName, lws.Spec.LeaderWorkerTemplate.WorkerTemplate.Spec.SchedulerName)
 		}
 
-		// Verify ray command wrapping
-		container := lws.Spec.LeaderWorkerTemplate.WorkerTemplate.Spec.Containers[0]
-		if len(container.Command) != 1 || container.Command[0] != "ray" {
-			t.Errorf("expected command [ray], got %v", container.Command)
+		// Verify LeaderTemplate is set for multi-node
+		if lws.Spec.LeaderWorkerTemplate.LeaderTemplate == nil {
+			t.Fatal("expected LeaderTemplate to be set for multi-node deployment")
 		}
-		if container.Args[0] != "symmetric-run" {
-			t.Errorf("expected first arg symmetric-run, got %s", container.Args[0])
+
+		// Verify leader container command
+		leaderContainer := lws.Spec.LeaderWorkerTemplate.LeaderTemplate.Spec.Containers[0]
+		expectedLeaderCmd := "ray start --head --port=6379 &&  --model Qwen/Qwen3-8B --distributed-executor-backend ray"
+		if leaderContainer.Args[0] != expectedLeaderCmd {
+			t.Errorf("leader command mismatch.\nExpected: %s\nGot: %s", expectedLeaderCmd, leaderContainer.Args[0])
+		}
+
+		// Verify worker container command
+		workerContainer := lws.Spec.LeaderWorkerTemplate.WorkerTemplate.Spec.Containers[0]
+		expectedWorkerCmd := "ray start --address=$LWS_LEADER_ADDRESS:6379 --block"
+		if workerContainer.Args[0] != expectedWorkerCmd {
+			t.Errorf("worker command mismatch.\nExpected: %s\nGot: %s", expectedWorkerCmd, workerContainer.Args[0])
 		}
 	})
 
@@ -301,166 +308,28 @@ func TestIsMultiNode(t *testing.T) {
 	}
 }
 
-func TestWrapContainerWithRay(t *testing.T) {
-	role := fusioninferiov1alpha1.Role{
-		Multinode: &fusioninferiov1alpha1.Multinode{NodeCount: 4},
-	}
-
-	container := &corev1.Container{
-		Name:    "vllm",
-		Image:   "vllm/vllm:latest",
-		Command: []string{"python", "-m", "vllm.entrypoints.openai.api_server"},
-		Args:    []string{"--model", "Qwen/Qwen3-8B"},
-		Resources: corev1.ResourceRequirements{
-			Limits: corev1.ResourceList{
-				"nvidia.com/gpu": resource.MustParse("8"),
-			},
-		},
-	}
-
-	wrapContainerWithRay(container, role)
-
-	// Verify command is now ray
-	if len(container.Command) != 1 || container.Command[0] != "ray" {
-		t.Errorf("expected command [ray], got %v", container.Command)
-	}
-
-	// Verify args structure
-	expectedArgsPrefix := []string{
-		"symmetric-run",
-		"--address",
-	}
-
-	for i, expected := range expectedArgsPrefix {
-		if container.Args[i] != expected {
-			t.Errorf("expected args[%d]=%s, got %s", i, expected, container.Args[i])
-		}
-	}
-
-	// Verify --min-nodes is set
-	found := false
-	for i, arg := range container.Args {
-		if arg == "--min-nodes" && i+1 < len(container.Args) {
-			if container.Args[i+1] != "4" {
-				t.Errorf("expected --min-nodes 4, got %s", container.Args[i+1])
-			}
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("expected --min-nodes flag")
-	}
-
-	// Verify --num-gpus is set
-	found = false
-	for i, arg := range container.Args {
-		if arg == "--num-gpus" && i+1 < len(container.Args) {
-			if container.Args[i+1] != "8" {
-				t.Errorf("expected --num-gpus 8, got %s", container.Args[i+1])
-			}
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("expected --num-gpus flag")
-	}
-
-	// Verify original command and args are preserved after --
-	foundSeparator := false
-	for i, arg := range container.Args {
-		if arg == "--" {
-			foundSeparator = true
-			// Check original command/args follow
-			remaining := container.Args[i+1:]
-			if len(remaining) < 4 {
-				t.Errorf("expected original command/args after --, got %v", remaining)
-			}
-			break
-		}
-	}
-	if !foundSeparator {
-		t.Error("expected -- separator in args")
-	}
-
-	// Verify Ray head port is added
-	found = false
-	for _, port := range container.Ports {
-		if port.ContainerPort == RayHeadPort {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("expected Ray head port to be added")
-	}
-}
-
-func TestGetGPUCount(t *testing.T) {
-	tests := []struct {
-		name      string
-		container *corev1.Container
-		want      int
-	}{
-		{
-			name: "no resources",
-			container: &corev1.Container{
-				Name: "test",
-			},
-			want: 0,
-		},
-		{
-			name: "no GPU limit",
-			container: &corev1.Container{
-				Name: "test",
-				Resources: corev1.ResourceRequirements{
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU: resource.MustParse("4"),
-					},
-				},
-			},
-			want: 0,
-		},
-		{
-			name: "8 GPUs",
-			container: &corev1.Container{
-				Name: "test",
-				Resources: corev1.ResourceRequirements{
-					Limits: corev1.ResourceList{
-						"nvidia.com/gpu": resource.MustParse("8"),
-					},
-				},
-			},
-			want: 8,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := getGPUCount(tt.container)
-			if got != tt.want {
-				t.Errorf("getGPUCount() = %d, want %d", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestEnsureRayHeadPort(t *testing.T) {
-	t.Run("adds port when missing", func(t *testing.T) {
+func TestWrapLeaderContainer(t *testing.T) {
+	t.Run("args only (vllm-openai image)", func(t *testing.T) {
 		container := &corev1.Container{
-			Name: "test",
-			Ports: []corev1.ContainerPort{
-				{Name: "http", ContainerPort: 8000},
-			},
+			Name:  "vllm",
+			Image: "vllm/vllm-openai:v0.13.0",
+			Args:  []string{"--model", "Qwen/Qwen3-8B"},
 		}
 
-		ensureRayHeadPort(container)
+		wrapLeaderContainer(container)
 
-		if len(container.Ports) != 2 {
-			t.Errorf("expected 2 ports, got %d", len(container.Ports))
+		// Verify command is shell
+		if len(container.Command) != 2 || container.Command[0] != "/bin/sh" || container.Command[1] != "-c" {
+			t.Errorf("expected command [/bin/sh -c], got %v", container.Command)
 		}
 
+		// Verify the complete generated command
+		expectedCmd := "ray start --head --port=6379 &&  --model Qwen/Qwen3-8B --distributed-executor-backend ray"
+		if container.Args[0] != expectedCmd {
+			t.Errorf("command mismatch.\nExpected: %s\nGot: %s", expectedCmd, container.Args[0])
+		}
+
+		// Verify Ray head port is added
 		found := false
 		for _, port := range container.Ports {
 			if port.ContainerPort == RayHeadPort {
@@ -471,20 +340,140 @@ func TestEnsureRayHeadPort(t *testing.T) {
 		if !found {
 			t.Error("expected Ray head port to be added")
 		}
+
+		// Verify readiness probe is set
+		if container.ReadinessProbe == nil {
+			t.Error("expected readiness probe to be set")
+		}
+		if container.ReadinessProbe.TCPSocket == nil || container.ReadinessProbe.TCPSocket.Port.IntValue() != RayHeadPort {
+			t.Error("expected readiness probe to check Ray head port")
+		}
 	})
 
-	t.Run("does not duplicate existing port", func(t *testing.T) {
+	t.Run("with command and args", func(t *testing.T) {
 		container := &corev1.Container{
-			Name: "test",
-			Ports: []corev1.ContainerPort{
-				{Name: "ray-head", ContainerPort: RayHeadPort},
+			Name:    "vllm",
+			Image:   "vllm/vllm:latest",
+			Command: []string{"python", "-m", "vllm.entrypoints.openai.api_server"},
+			Args:    []string{"--model", "Qwen/Qwen3-8B"},
+		}
+
+		wrapLeaderContainer(container)
+
+		// Verify the complete generated command
+		expectedCmd := "ray start --head --port=6379 && python -m vllm.entrypoints.openai.api_server --model Qwen/Qwen3-8B --distributed-executor-backend ray"
+		if container.Args[0] != expectedCmd {
+			t.Errorf("command mismatch.\nExpected: %s\nGot: %s", expectedCmd, container.Args[0])
+		}
+	})
+
+	t.Run("does not duplicate distributed-executor-backend flag", func(t *testing.T) {
+		container := &corev1.Container{
+			Name:    "vllm",
+			Image:   "vllm/vllm:latest",
+			Command: []string{"vllm", "serve"},
+			Args:    []string{"--model", "test", "--distributed-executor-backend", "mp"},
+		}
+
+		wrapLeaderContainer(container)
+
+		// Count occurrences of --distributed-executor-backend
+		count := strings.Count(container.Args[0], "--distributed-executor-backend")
+		if count != 1 {
+			t.Errorf("expected --distributed-executor-backend to appear once (from original args), got %d times", count)
+		}
+	})
+
+	t.Run("preserves existing readiness probe", func(t *testing.T) {
+		container := &corev1.Container{
+			Name:    "vllm",
+			Image:   "vllm/vllm:latest",
+			Command: []string{"vllm", "serve"},
+			Args:    []string{"--model", "test"},
+			ReadinessProbe: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					HTTPGet: &corev1.HTTPGetAction{
+						Path: "/health",
+						Port: intstr.FromInt(8000),
+					},
+				},
 			},
 		}
 
-		ensureRayHeadPort(container)
+		wrapLeaderContainer(container)
+
+		// Verify original readiness probe is preserved
+		if container.ReadinessProbe.HTTPGet == nil {
+			t.Error("expected original HTTP readiness probe to be preserved")
+		}
+		if container.ReadinessProbe.TCPSocket != nil {
+			t.Error("should not override existing readiness probe with TCP socket")
+		}
+	})
+}
+
+func TestWrapWorkerContainer(t *testing.T) {
+	t.Run("wraps worker container", func(t *testing.T) {
+		container := &corev1.Container{
+			Name:  "vllm",
+			Image: "vllm/vllm-openai:v0.13.0",
+			Args:  []string{"--model", "Qwen/Qwen3-8B"},
+		}
+
+		wrapWorkerContainer(container)
+
+		// Verify command is shell
+		if len(container.Command) != 2 || container.Command[0] != "/bin/sh" || container.Command[1] != "-c" {
+			t.Errorf("expected command [/bin/sh -c], got %v", container.Command)
+		}
+
+		// Verify the complete generated command
+		expectedCmd := "ray start --address=$LWS_LEADER_ADDRESS:6379 --block"
+		if container.Args[0] != expectedCmd {
+			t.Errorf("command mismatch.\nExpected: %s\nGot: %s", expectedCmd, container.Args[0])
+		}
+	})
+}
+
+func TestAddRayHeadPort(t *testing.T) {
+	t.Run("adds port to container", func(t *testing.T) {
+		container := &corev1.Container{
+			Name: "test",
+			Ports: []corev1.ContainerPort{
+				{Name: "http", ContainerPort: 8000},
+			},
+		}
+
+		addRayHeadPort(container)
+
+		if len(container.Ports) != 2 {
+			t.Errorf("expected 2 ports, got %d", len(container.Ports))
+		}
+
+		found := false
+		for _, port := range container.Ports {
+			if port.ContainerPort == RayHeadPort && port.Name == "ray-head" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("expected Ray head port to be added")
+		}
+	})
+
+	t.Run("adds port to empty ports list", func(t *testing.T) {
+		container := &corev1.Container{
+			Name: "test",
+		}
+
+		addRayHeadPort(container)
 
 		if len(container.Ports) != 1 {
-			t.Errorf("expected 1 port (no duplicate), got %d", len(container.Ports))
+			t.Errorf("expected 1 port, got %d", len(container.Ports))
+		}
+		if container.Ports[0].ContainerPort != RayHeadPort {
+			t.Errorf("expected port %d, got %d", RayHeadPort, container.Ports[0].ContainerPort)
 		}
 	})
 }

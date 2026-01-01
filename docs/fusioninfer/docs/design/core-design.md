@@ -524,42 +524,52 @@ spec:
   replicas: 1                         # Always 1 in per-replica mode
   leaderWorkerTemplate:
     size: 4                           # 4 pods per replica
-    workerTemplate:
+    # LeaderTemplate: Leader starts Ray head and runs vLLM
+    leaderTemplate:
       metadata:
         labels:
           fusioninfer.io/replica-index: "0"
         annotations:
-          scheduling.k8s.io/group-name: deepseek-r1-inference  # Shared PodGroup
-          volcano.sh/task-spec: inference-0                    # Task: {roleName}-{replicaIndex}
+          scheduling.k8s.io/group-name: deepseek-r1-inference
+          volcano.sh/task-spec: inference-0
       spec:
         schedulerName: volcano
         containers:
           - name: vllm
             image: vllm/vllm-openai:v0.11.0
-            command: ["ray"]
+            command: ["/bin/sh", "-c"]
             args:
-              - "symmetric-run"
-              - "--address"
-              - "$(LWS_LEADER_ADDRESS):6379"
-              - "--min-nodes"
-              - "4"
-              - "--num-gpus"
-              - "8"
-              - "--"
-              - "vllm"
-              - "serve"
-              - "deepseek-ai/DeepSeek-R1"
-              - "--tensor-parallel-size"
-              - "32"
+              - "ray start --head --port=6379 && vllm serve deepseek-ai/DeepSeek-R1 --tensor-parallel-size 32 --distributed-executor-backend ray"
             ports:
               - containerPort: 8000
               - containerPort: 6379
             resources:
               limits:
                 nvidia.com/gpu: "8"
+    # WorkerTemplate: Workers join Ray cluster
+    workerTemplate:
+      metadata:
+        labels:
+          fusioninfer.io/replica-index: "0"
+        annotations:
+          scheduling.k8s.io/group-name: deepseek-r1-inference
+          volcano.sh/task-spec: inference-0
+      spec:
+        schedulerName: volcano
+        containers:
+          - name: vllm
+            image: vllm/vllm-openai:v0.11.0
+            command: ["/bin/sh", "-c"]
+            args:
+              - "ray start --address=$LWS_LEADER_ADDRESS:6379 --block"
+            resources:
+              limits:
+                nvidia.com/gpu: "8"
 ```
 
-> **Note**: The `ray symmetric-run` command is automatically injected by the Controller for multi-node deployments. It wraps the original container command to enable distributed execution via Ray.
+> **Note**: For multi-node deployments, the Controller automatically generates separate `leaderTemplate` and `workerTemplate`:
+> - **Leader**: `ray start --head && <original command> --distributed-executor-backend ray`
+> - **Worker**: `ray start --address=$LWS_LEADER_ADDRESS:6379 --block`
 
 ### Gang Scheduling Behavior
 
