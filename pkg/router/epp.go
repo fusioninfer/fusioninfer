@@ -17,7 +17,6 @@ limitations under the License.
 package router
 
 import (
-	"fmt"
 	"os"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -28,6 +27,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/core/v1alpha1"
+	"github.com/fusioninfer/fusioninfer/pkg/util"
 	"github.com/fusioninfer/fusioninfer/pkg/workload"
 )
 
@@ -59,19 +59,22 @@ func BuildEPPConfigMap(inferSvc *fusioninferiov1alpha1.InferenceService, role fu
 	configMapName := GenerateEPPConfigMapName(inferSvc.Name)
 	configYAML := GenerateEPPConfig(inferSvc, role)
 
-	return &corev1.ConfigMap{
+	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      configMapName,
 			Namespace: inferSvc.Namespace,
 			Labels: map[string]string{
-				workload.LabelService:  inferSvc.Name,
-				workload.LabelRevision: fmt.Sprintf("%d", inferSvc.Generation),
+				workload.LabelService: inferSvc.Name,
 			},
 		},
 		Data: map[string]string{
 			EPPConfigFileName: configYAML,
 		},
 	}
+
+	// Compute hash based on Data content
+	cm.Labels[workload.LabelSpecHash] = util.ComputeSpecHash(cm.Data)
+	return cm
 }
 
 // BuildEPPDeployment constructs the EPP Deployment
@@ -80,20 +83,19 @@ func BuildEPPDeployment(inferSvc *fusioninferiov1alpha1.InferenceService) *appsv
 	configMapName := GenerateEPPConfigMapName(inferSvc.Name)
 	poolName := GeneratePoolName(inferSvc.Name)
 
-	// Selector labels are immutable, so don't include revision
+	// Selector labels are immutable, so don't include spec hash
 	selectorLabels := map[string]string{
 		"app":                 deploymentName,
 		workload.LabelService: inferSvc.Name,
 	}
 
-	// Metadata labels include revision for update detection
+	// Metadata labels (spec hash will be added after spec is built)
 	metadataLabels := map[string]string{
-		"app":                  deploymentName,
-		workload.LabelService:  inferSvc.Name,
-		workload.LabelRevision: fmt.Sprintf("%d", inferSvc.Generation),
+		"app":                 deploymentName,
+		workload.LabelService: inferSvc.Name,
 	}
 
-	return &appsv1.Deployment{
+	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      deploymentName,
 			Namespace: inferSvc.Namespace,
@@ -200,6 +202,10 @@ func BuildEPPDeployment(inferSvc *fusioninferiov1alpha1.InferenceService) *appsv
 			},
 		},
 	}
+
+	// Compute spec hash after the spec is fully built
+	deploy.Labels[workload.LabelSpecHash] = util.ComputeSpecHash(deploy.Spec)
+	return deploy
 }
 
 // BuildEPPService constructs the EPP Service
@@ -207,13 +213,12 @@ func BuildEPPService(inferSvc *fusioninferiov1alpha1.InferenceService) *corev1.S
 	serviceName := GenerateEPPServiceName(inferSvc.Name)
 	deploymentName := GenerateEPPDeploymentName(inferSvc.Name)
 
-	return &corev1.Service{
+	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      serviceName,
 			Namespace: inferSvc.Namespace,
 			Labels: map[string]string{
-				workload.LabelService:  inferSvc.Name,
-				workload.LabelRevision: fmt.Sprintf("%d", inferSvc.Generation),
+				workload.LabelService: inferSvc.Name,
 			},
 		},
 		Spec: corev1.ServiceSpec{
@@ -243,9 +248,14 @@ func BuildEPPService(inferSvc *fusioninferiov1alpha1.InferenceService) *corev1.S
 			},
 		},
 	}
+
+	// Compute spec hash after the spec is fully built
+	svc.Labels[workload.LabelSpecHash] = util.ComputeSpecHash(svc.Spec)
+	return svc
 }
 
 // BuildEPPServiceAccount constructs the ServiceAccount for EPP
+// ServiceAccount has no spec that changes, so we just use a constant hash
 func BuildEPPServiceAccount(inferSvc *fusioninferiov1alpha1.InferenceService) *corev1.ServiceAccount {
 	saName := GenerateEPPDeploymentName(inferSvc.Name)
 
@@ -255,7 +265,7 @@ func BuildEPPServiceAccount(inferSvc *fusioninferiov1alpha1.InferenceService) *c
 			Namespace: inferSvc.Namespace,
 			Labels: map[string]string{
 				workload.LabelService:  inferSvc.Name,
-				workload.LabelRevision: fmt.Sprintf("%d", inferSvc.Generation),
+				workload.LabelSpecHash: "static", // ServiceAccount has no meaningful spec
 			},
 		},
 	}
@@ -266,13 +276,12 @@ func BuildEPPServiceAccount(inferSvc *fusioninferiov1alpha1.InferenceService) *c
 func BuildEPPRole(inferSvc *fusioninferiov1alpha1.InferenceService) *rbacv1.Role {
 	roleName := GenerateEPPDeploymentName(inferSvc.Name)
 
-	return &rbacv1.Role{
+	role := &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      roleName,
 			Namespace: inferSvc.Namespace,
 			Labels: map[string]string{
-				workload.LabelService:  inferSvc.Name,
-				workload.LabelRevision: fmt.Sprintf("%d", inferSvc.Generation),
+				workload.LabelService: inferSvc.Name,
 			},
 		},
 		Rules: []rbacv1.PolicyRule{
@@ -308,19 +317,22 @@ func BuildEPPRole(inferSvc *fusioninferiov1alpha1.InferenceService) *rbacv1.Role
 			},
 		},
 	}
+
+	// Compute spec hash based on Rules
+	role.Labels[workload.LabelSpecHash] = util.ComputeSpecHash(role.Rules)
+	return role
 }
 
 // BuildEPPRoleBinding constructs the RoleBinding for EPP
 func BuildEPPRoleBinding(inferSvc *fusioninferiov1alpha1.InferenceService) *rbacv1.RoleBinding {
 	name := GenerateEPPDeploymentName(inferSvc.Name)
 
-	return &rbacv1.RoleBinding{
+	rb := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: inferSvc.Namespace,
 			Labels: map[string]string{
-				workload.LabelService:  inferSvc.Name,
-				workload.LabelRevision: fmt.Sprintf("%d", inferSvc.Generation),
+				workload.LabelService: inferSvc.Name,
 			},
 		},
 		RoleRef: rbacv1.RoleRef{
@@ -336,4 +348,11 @@ func BuildEPPRoleBinding(inferSvc *fusioninferiov1alpha1.InferenceService) *rbac
 			},
 		},
 	}
+
+	// Compute spec hash based on RoleRef and Subjects
+	rb.Labels[workload.LabelSpecHash] = util.ComputeSpecHash(struct {
+		RoleRef  rbacv1.RoleRef
+		Subjects []rbacv1.Subject
+	}{rb.RoleRef, rb.Subjects})
+	return rb
 }

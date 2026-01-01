@@ -18,12 +18,12 @@ package router
 
 import (
 	"encoding/json"
-	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/core/v1alpha1"
+	"github.com/fusioninfer/fusioninfer/pkg/util"
 	"github.com/fusioninfer/fusioninfer/pkg/workload"
 )
 
@@ -43,8 +43,7 @@ func BuildHTTPRoute(inferSvc *fusioninferiov1alpha1.InferenceService, role fusio
 			Name:      routeName,
 			Namespace: inferSvc.Namespace,
 			Labels: map[string]string{
-				workload.LabelService:  inferSvc.Name,
-				workload.LabelRevision: fmt.Sprintf("%d", inferSvc.Generation),
+				workload.LabelService: inferSvc.Name,
 			},
 		},
 		Spec: gatewayv1.HTTPRouteSpec{},
@@ -66,6 +65,9 @@ func BuildHTTPRoute(inferSvc *fusioninferiov1alpha1.InferenceService, role fusio
 			},
 		},
 	}
+
+	// Compute spec hash after the spec is fully built
+	httpRoute.Labels[workload.LabelSpecHash] = util.ComputeSpecHash(httpRoute.Spec)
 
 	return httpRoute
 }

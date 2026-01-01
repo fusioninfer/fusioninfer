@@ -23,6 +23,7 @@ import (
 	inferenceapi "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 
 	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/core/v1alpha1"
+	"github.com/fusioninfer/fusioninfer/pkg/util"
 	"github.com/fusioninfer/fusioninfer/pkg/workload"
 )
 
@@ -48,8 +49,7 @@ func BuildInferencePool(inferSvc *fusioninferiov1alpha1.InferenceService, worker
 			Name:      poolName,
 			Namespace: inferSvc.Namespace,
 			Labels: map[string]string{
-				workload.LabelService:  inferSvc.Name,
-				workload.LabelRevision: fmt.Sprintf("%d", inferSvc.Generation),
+				workload.LabelService: inferSvc.Name,
 			},
 		},
 		Spec: inferenceapi.InferencePoolSpec{
@@ -67,6 +67,9 @@ func BuildInferencePool(inferSvc *fusioninferiov1alpha1.InferenceService, worker
 			},
 		},
 	}
+
+	// Compute spec hash after the spec is fully built
+	pool.Labels[workload.LabelSpecHash] = util.ComputeSpecHash(pool.Spec)
 
 	return pool
 }

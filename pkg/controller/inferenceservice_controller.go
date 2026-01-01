@@ -183,8 +183,8 @@ func (r *InferenceServiceReconciler) reconcilePodGroup(ctx context.Context, infe
 		return err
 	}
 
-	// Update only if revision changed
-	if existingPG.Labels[workload.LabelRevision] != pg.Labels[workload.LabelRevision] {
+	// Update only if spec hash changed
+	if existingPG.Labels[workload.LabelSpecHash] != pg.Labels[workload.LabelSpecHash] {
 		existingPG.Labels = pg.Labels
 		existingPG.Spec = pg.Spec
 		log.V(1).Info("Updating PodGroup", "name", pg.Name)
@@ -243,8 +243,8 @@ func (r *InferenceServiceReconciler) reconcileLWS(ctx context.Context, inferSvc 
 			return err
 		}
 
-		// Update only if revision changed
-		if existingLWS.Labels[workload.LabelRevision] != lws.Labels[workload.LabelRevision] {
+		// Update only if spec hash changed
+		if existingLWS.Labels[workload.LabelSpecHash] != lws.Labels[workload.LabelSpecHash] {
 			existingLWS.Labels = lws.Labels
 			existingLWS.Spec = lws.Spec
 			log.V(1).Info("Updating LWS", "name", lws.Name, "role", role.Name, "replica", i)
@@ -378,8 +378,8 @@ func (r *InferenceServiceReconciler) reconcileEPPRole(ctx context.Context, infer
 		return err
 	}
 
-	// Update only if revision changed
-	if existing.Labels[workload.LabelRevision] != role.Labels[workload.LabelRevision] {
+	// Update only if spec hash changed
+	if existing.Labels[workload.LabelSpecHash] != role.Labels[workload.LabelSpecHash] {
 		existing.Labels = role.Labels
 		existing.Rules = role.Rules
 		return r.Update(ctx, existing)
@@ -403,8 +403,8 @@ func (r *InferenceServiceReconciler) reconcileEPPRoleBinding(ctx context.Context
 		return err
 	}
 
-	// Update only if revision changed
-	if existing.Labels[workload.LabelRevision] != rb.Labels[workload.LabelRevision] {
+	// Update only if spec hash changed
+	if existing.Labels[workload.LabelSpecHash] != rb.Labels[workload.LabelSpecHash] {
 		existing.Labels = rb.Labels
 		existing.RoleRef = rb.RoleRef
 		existing.Subjects = rb.Subjects
@@ -429,8 +429,8 @@ func (r *InferenceServiceReconciler) reconcileEPPConfigMap(ctx context.Context, 
 		return err
 	}
 
-	// Update only if revision changed
-	if existing.Labels[workload.LabelRevision] != cm.Labels[workload.LabelRevision] {
+	// Update only if spec hash changed
+	if existing.Labels[workload.LabelSpecHash] != cm.Labels[workload.LabelSpecHash] {
 		existing.Labels = cm.Labels
 		existing.Data = cm.Data
 		return r.Update(ctx, existing)
@@ -454,8 +454,8 @@ func (r *InferenceServiceReconciler) reconcileEPPDeployment(ctx context.Context,
 		return err
 	}
 
-	// Update only if revision changed (only update mutable fields)
-	if existing.Labels[workload.LabelRevision] != deploy.Labels[workload.LabelRevision] {
+	// Update only if spec hash changed (only update mutable fields)
+	if existing.Labels[workload.LabelSpecHash] != deploy.Labels[workload.LabelSpecHash] {
 		existing.Labels = deploy.Labels
 		// Don't update spec.selector as it's immutable
 		existing.Spec.Template = deploy.Spec.Template
@@ -482,8 +482,8 @@ func (r *InferenceServiceReconciler) reconcileEPPService(ctx context.Context, in
 		return err
 	}
 
-	// Update only if revision changed
-	if existing.Labels[workload.LabelRevision] != svc.Labels[workload.LabelRevision] {
+	// Update only if spec hash changed
+	if existing.Labels[workload.LabelSpecHash] != svc.Labels[workload.LabelSpecHash] {
 		existing.Labels = svc.Labels
 		existing.Spec.Ports = svc.Spec.Ports
 		existing.Spec.Selector = svc.Spec.Selector
@@ -508,8 +508,8 @@ func (r *InferenceServiceReconciler) reconcileInferencePool(ctx context.Context,
 		return err
 	}
 
-	// Update only if revision changed
-	if existing.Labels[workload.LabelRevision] != pool.Labels[workload.LabelRevision] {
+	// Update only if spec hash changed
+	if existing.Labels[workload.LabelSpecHash] != pool.Labels[workload.LabelSpecHash] {
 		existing.Labels = pool.Labels
 		existing.Spec = pool.Spec
 		return r.Update(ctx, existing)
@@ -533,8 +533,8 @@ func (r *InferenceServiceReconciler) reconcileHTTPRoute(ctx context.Context, inf
 		return err
 	}
 
-	// Update only if revision changed
-	if existing.Labels[workload.LabelRevision] != httpRoute.Labels[workload.LabelRevision] {
+	// Update only if spec hash changed
+	if existing.Labels[workload.LabelSpecHash] != httpRoute.Labels[workload.LabelSpecHash] {
 		existing.Labels = httpRoute.Labels
 		existing.Spec = httpRoute.Spec
 		return r.Update(ctx, existing)

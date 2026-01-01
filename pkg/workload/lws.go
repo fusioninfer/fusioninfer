@@ -28,6 +28,7 @@ import (
 	lwsv1 "sigs.k8s.io/lws/api/leaderworkerset/v1"
 
 	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/core/v1alpha1"
+	"github.com/fusioninfer/fusioninfer/pkg/util"
 )
 
 const (
@@ -42,7 +43,9 @@ const (
 	LabelComponentType = "fusioninfer.io/component-type"
 	LabelRoleName      = "fusioninfer.io/role-name"
 	LabelReplicaIndex  = "fusioninfer.io/replica-index"
-	LabelRevision      = "fusioninfer.io/revision"
+	// LabelSpecHash stores the hash of the resource spec for change detection
+	// When the spec changes, the hash changes, triggering reconciliation
+	LabelSpecHash = "fusioninfer.io/spec-hash"
 
 	// Annotations for Volcano gang scheduling
 	AnnotationPodGroupName = "scheduling.k8s.io/group-name"
@@ -85,12 +88,11 @@ func BuildLWS(inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninfer
 		replicas = *role.Replicas
 	}
 
-	// Build labels with revision for update detection
+	// Build base labels (without spec hash, which will be added after spec is built)
 	labels := map[string]string{
 		LabelService:       inferSvc.Name,
 		LabelComponentType: string(role.ComponentType),
 		LabelRoleName:      role.Name,
-		LabelRevision:      fmt.Sprintf("%d", inferSvc.Generation),
 	}
 
 	// Add replica index label for per-replica mode
@@ -120,6 +122,9 @@ func BuildLWS(inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninfer
 		Spec: lwsv1.LeaderWorkerSetSpec{
 			Replicas:      ptr.To(replicas),
 			StartupPolicy: lwsv1.LeaderCreatedStartupPolicy,
+			RolloutStrategy: lwsv1.RolloutStrategy{
+				Type: lwsv1.RollingUpdateStrategyType,
+			},
 			LeaderWorkerTemplate: lwsv1.LeaderWorkerTemplate{
 				Size: ptr.To(size),
 				WorkerTemplate: corev1.PodTemplateSpec{
@@ -147,6 +152,10 @@ func BuildLWS(inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninfer
 			Spec: leaderPodSpec,
 		}
 	}
+
+	// Compute spec hash after the spec is fully built and set it as a label
+	specHash := util.ComputeSpecHash(lws.Spec)
+	lws.Labels[LabelSpecHash] = specHash
 
 	return lws
 }
