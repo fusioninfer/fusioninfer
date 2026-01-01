@@ -140,6 +140,16 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 	- $(CONTAINER_TOOL) buildx rm fusioninfer-builder
 	rm Dockerfile.cross
 
+##@ Documentation
+
+.PHONY: doc
+doc: ## Start documentation development server.
+	cd docs/fusioninfer && npm install && npm start
+
+.PHONY: doc-build
+doc-build: ## Build documentation static files.
+	cd docs/fusioninfer && npm install && npm run build
+
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist

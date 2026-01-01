@@ -5,6 +5,13 @@ const sidebars: SidebarsConfig = {
     'intro',
     {
       type: 'category',
+      label: 'User Guide',
+      items: [
+        'user-guide/deployment',
+      ],
+    },
+    {
+      type: 'category',
       label: 'Design',
       items: [
         'design/core-design',
