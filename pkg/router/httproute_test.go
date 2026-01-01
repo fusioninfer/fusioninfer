@@ -28,6 +28,8 @@ import (
 	"github.com/fusioninfer/fusioninfer/pkg/workload"
 )
 
+const testPoolName = "test-service-pool"
+
 func TestBuildHTTPRoute(t *testing.T) {
 	inferSvc := &fusioninferiov1alpha1.InferenceService{
 		ObjectMeta: metav1.ObjectMeta{
@@ -56,7 +58,8 @@ func TestBuildHTTPRoute(t *testing.T) {
 
 	// Verify labels
 	if httpRoute.Labels[workload.LabelService] != "test-service" {
-		t.Errorf("expected label %s=%s, got %s", workload.LabelService, "test-service", httpRoute.Labels[workload.LabelService])
+		t.Errorf("expected label %s=%s, got %s",
+			workload.LabelService, "test-service", httpRoute.Labels[workload.LabelService])
 	}
 
 	// Verify default rule is created
@@ -70,16 +73,15 @@ func TestBuildHTTPRoute(t *testing.T) {
 	}
 
 	backendRef := httpRoute.Spec.Rules[0].BackendRefs[0]
-	if *backendRef.BackendRef.Group != gatewayv1.Group(InferencePoolGroup) {
-		t.Errorf("expected group %s, got %s", InferencePoolGroup, *backendRef.BackendRef.Group)
+	if *backendRef.Group != gatewayv1.Group(InferencePoolGroup) {
+		t.Errorf("expected group %s, got %s", InferencePoolGroup, *backendRef.Group)
 	}
-	if *backendRef.BackendRef.Kind != gatewayv1.Kind(InferencePoolKind) {
-		t.Errorf("expected kind %s, got %s", InferencePoolKind, *backendRef.BackendRef.Kind)
+	if *backendRef.Kind != gatewayv1.Kind(InferencePoolKind) {
+		t.Errorf("expected kind %s, got %s", InferencePoolKind, *backendRef.Kind)
 	}
 
-	expectedPoolName := "test-service-pool"
-	if string(backendRef.BackendRef.Name) != expectedPoolName {
-		t.Errorf("expected pool name %s, got %s", expectedPoolName, backendRef.BackendRef.Name)
+	if string(backendRef.Name) != testPoolName {
+		t.Errorf("expected pool name %s, got %s", testPoolName, backendRef.Name)
 	}
 }
 
@@ -135,9 +137,8 @@ func TestBuildHTTPRouteWithUserProvidedSpec(t *testing.T) {
 	}
 
 	backendRef := httpRoute.Spec.Rules[0].BackendRefs[0]
-	expectedPoolName := "test-service-pool"
-	if string(backendRef.BackendRef.Name) != expectedPoolName {
-		t.Errorf("expected pool name %s, got %s", expectedPoolName, backendRef.BackendRef.Name)
+	if string(backendRef.Name) != testPoolName {
+		t.Errorf("expected pool name %s, got %s", testPoolName, backendRef.Name)
 	}
 }
 

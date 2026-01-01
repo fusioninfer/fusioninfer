@@ -139,7 +139,7 @@ func TestBuildLWS(t *testing.T) {
 		}
 
 		// Verify gang scheduling annotations
-		podAnnotations := lws.Spec.LeaderWorkerTemplate.WorkerTemplate.ObjectMeta.Annotations
+		podAnnotations := lws.Spec.LeaderWorkerTemplate.WorkerTemplate.Annotations
 		if podAnnotations[AnnotationPodGroupName] != "multi-node-service" {
 			t.Errorf("expected PodGroup annotation, got %s", podAnnotations[AnnotationPodGroupName])
 		}
@@ -148,8 +148,9 @@ func TestBuildLWS(t *testing.T) {
 		}
 
 		// Verify Volcano scheduler
-		if lws.Spec.LeaderWorkerTemplate.WorkerTemplate.Spec.SchedulerName != VolcanoSchedulerName {
-			t.Errorf("expected scheduler %s, got %s", VolcanoSchedulerName, lws.Spec.LeaderWorkerTemplate.WorkerTemplate.Spec.SchedulerName)
+		schedulerName := lws.Spec.LeaderWorkerTemplate.WorkerTemplate.Spec.SchedulerName
+		if schedulerName != VolcanoSchedulerName {
+			t.Errorf("expected scheduler %s, got %s", VolcanoSchedulerName, schedulerName)
 		}
 
 		// Verify LeaderTemplate is set for multi-node
@@ -159,9 +160,11 @@ func TestBuildLWS(t *testing.T) {
 
 		// Verify leader container command (uses default "vllm serve" when command is empty)
 		leaderContainer := lws.Spec.LeaderWorkerTemplate.LeaderTemplate.Spec.Containers[0]
-		expectedLeaderCmd := "ray start --head --port=6379 && vllm serve --model Qwen/Qwen3-8B --distributed-executor-backend ray"
+		expectedLeaderCmd := "ray start --head --port=6379 && " +
+			"vllm serve --model Qwen/Qwen3-8B --distributed-executor-backend ray"
 		if leaderContainer.Args[0] != expectedLeaderCmd {
-			t.Errorf("leader command mismatch.\nExpected: %s\nGot: %s", expectedLeaderCmd, leaderContainer.Args[0])
+			t.Errorf("leader command mismatch.\nExpected: %s\nGot: %s",
+				expectedLeaderCmd, leaderContainer.Args[0])
 		}
 
 		// Verify worker container command
@@ -361,7 +364,9 @@ func TestWrapLeaderContainer(t *testing.T) {
 		wrapLeaderContainer(container)
 
 		// Verify the complete generated command
-		expectedCmd := "ray start --head --port=6379 && python -m vllm.entrypoints.openai.api_server --model Qwen/Qwen3-8B --distributed-executor-backend ray"
+		expectedCmd := "ray start --head --port=6379 && " +
+			"python -m vllm.entrypoints.openai.api_server " +
+			"--model Qwen/Qwen3-8B --distributed-executor-backend ray"
 		if container.Args[0] != expectedCmd {
 			t.Errorf("command mismatch.\nExpected: %s\nGot: %s", expectedCmd, container.Args[0])
 		}

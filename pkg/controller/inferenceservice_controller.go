@@ -48,6 +48,7 @@ type InferenceServiceReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+//nolint:lll // kubebuilder annotations cannot be split
 // +kubebuilder:rbac:groups=fusioninfer.io,resources=inferenceservices,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=fusioninfer.io,resources=inferenceservices/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=fusioninfer.io,resources=inferenceservices/finalizers,verbs=update
@@ -157,7 +158,10 @@ RoleLoop:
 // reconcilePodGroup creates or updates a single PodGroup for the InferenceService
 // The PodGroup uses minTaskMember with keys in format {roleName}-{replicaIndex}
 // This ensures both cross-role scheduling (PD) and intra-replica atomic scheduling (multi-node)
-func (r *InferenceServiceReconciler) reconcilePodGroup(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService) error {
+func (r *InferenceServiceReconciler) reconcilePodGroup(
+	ctx context.Context,
+	inferSvc *fusioninferiov1alpha1.InferenceService,
+) error {
 	log := logf.FromContext(ctx)
 
 	// Only create PodGroup if gang scheduling is needed
@@ -183,8 +187,8 @@ func (r *InferenceServiceReconciler) reconcilePodGroup(ctx context.Context, infe
 		return err
 	}
 
-	// Update only if revision changed
-	if existingPG.Labels[workload.LabelRevision] != pg.Labels[workload.LabelRevision] {
+	// Update if spec hash changed
+	if existingPG.Labels[workload.LabelSpecHash] != pg.Labels[workload.LabelSpecHash] {
 		existingPG.Labels = pg.Labels
 		existingPG.Spec = pg.Spec
 		log.V(1).Info("Updating PodGroup", "name", pg.Name)
@@ -196,7 +200,11 @@ func (r *InferenceServiceReconciler) reconcilePodGroup(ctx context.Context, infe
 // reconcileLWS creates or updates the LeaderWorkerSet(s) for a role
 // Creates one LWS per replica to support fine-grained gang scheduling
 // Also cleans up orphan LWS when replicas are scaled down
-func (r *InferenceServiceReconciler) reconcileLWS(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninferiov1alpha1.Role) error {
+func (r *InferenceServiceReconciler) reconcileLWS(
+	ctx context.Context,
+	inferSvc *fusioninferiov1alpha1.InferenceService,
+	role fusioninferiov1alpha1.Role,
+) error {
 	log := logf.FromContext(ctx)
 
 	replicas := scheduling.GetReplicaCount(role)
@@ -243,8 +251,8 @@ func (r *InferenceServiceReconciler) reconcileLWS(ctx context.Context, inferSvc 
 			return err
 		}
 
-		// Update only if revision changed
-		if existingLWS.Labels[workload.LabelRevision] != lws.Labels[workload.LabelRevision] {
+		// Update if spec hash changed
+		if existingLWS.Labels[workload.LabelSpecHash] != lws.Labels[workload.LabelSpecHash] {
 			existingLWS.Labels = lws.Labels
 			existingLWS.Spec = lws.Spec
 			log.V(1).Info("Updating LWS", "name", lws.Name, "role", role.Name, "replica", i)
@@ -264,7 +272,12 @@ func (r *InferenceServiceReconciler) reconcileLWS(ctx context.Context, inferSvc 
 }
 
 // cleanupOrphanLWS deletes LWS that are no longer needed (e.g., when replicas scaled down)
-func (r *InferenceServiceReconciler) cleanupOrphanLWS(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninferiov1alpha1.Role, desiredLWSNames map[string]bool) error {
+func (r *InferenceServiceReconciler) cleanupOrphanLWS(
+	ctx context.Context,
+	inferSvc *fusioninferiov1alpha1.InferenceService,
+	role fusioninferiov1alpha1.Role,
+	desiredLWSNames map[string]bool,
+) error {
 	log := logf.FromContext(ctx)
 
 	// List all LWS for this role
@@ -297,7 +310,12 @@ func (r *InferenceServiceReconciler) cleanupOrphanLWS(ctx context.Context, infer
 }
 
 // reconcileRouter creates or updates all router-related resources
-func (r *InferenceServiceReconciler) reconcileRouter(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninferiov1alpha1.Role, workerRoles []fusioninferiov1alpha1.Role) error {
+func (r *InferenceServiceReconciler) reconcileRouter(
+	ctx context.Context,
+	inferSvc *fusioninferiov1alpha1.InferenceService,
+	role fusioninferiov1alpha1.Role,
+	workerRoles []fusioninferiov1alpha1.Role,
+) error {
 	log := logf.FromContext(ctx)
 
 	// 1. Create ServiceAccount for EPP
@@ -344,7 +362,10 @@ func (r *InferenceServiceReconciler) reconcileRouter(ctx context.Context, inferS
 	return nil
 }
 
-func (r *InferenceServiceReconciler) reconcileEPPServiceAccount(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService) error {
+func (r *InferenceServiceReconciler) reconcileEPPServiceAccount(
+	ctx context.Context,
+	inferSvc *fusioninferiov1alpha1.InferenceService,
+) error {
 	sa := router.BuildEPPServiceAccount(inferSvc)
 
 	if err := controllerutil.SetControllerReference(inferSvc, sa, r.Scheme); err != nil {
@@ -362,7 +383,10 @@ func (r *InferenceServiceReconciler) reconcileEPPServiceAccount(ctx context.Cont
 	return nil // ServiceAccount doesn't need updates
 }
 
-func (r *InferenceServiceReconciler) reconcileEPPRole(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService) error {
+func (r *InferenceServiceReconciler) reconcileEPPRole(
+	ctx context.Context,
+	inferSvc *fusioninferiov1alpha1.InferenceService,
+) error {
 	role := router.BuildEPPRole(inferSvc)
 
 	if err := controllerutil.SetControllerReference(inferSvc, role, r.Scheme); err != nil {
@@ -378,8 +402,8 @@ func (r *InferenceServiceReconciler) reconcileEPPRole(ctx context.Context, infer
 		return err
 	}
 
-	// Update only if revision changed
-	if existing.Labels[workload.LabelRevision] != role.Labels[workload.LabelRevision] {
+	// Update if spec hash changed
+	if existing.Labels[workload.LabelSpecHash] != role.Labels[workload.LabelSpecHash] {
 		existing.Labels = role.Labels
 		existing.Rules = role.Rules
 		return r.Update(ctx, existing)
@@ -387,7 +411,10 @@ func (r *InferenceServiceReconciler) reconcileEPPRole(ctx context.Context, infer
 	return nil
 }
 
-func (r *InferenceServiceReconciler) reconcileEPPRoleBinding(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService) error {
+func (r *InferenceServiceReconciler) reconcileEPPRoleBinding(
+	ctx context.Context,
+	inferSvc *fusioninferiov1alpha1.InferenceService,
+) error {
 	rb := router.BuildEPPRoleBinding(inferSvc)
 
 	if err := controllerutil.SetControllerReference(inferSvc, rb, r.Scheme); err != nil {
@@ -403,8 +430,8 @@ func (r *InferenceServiceReconciler) reconcileEPPRoleBinding(ctx context.Context
 		return err
 	}
 
-	// Update only if revision changed
-	if existing.Labels[workload.LabelRevision] != rb.Labels[workload.LabelRevision] {
+	// Update if spec hash changed
+	if existing.Labels[workload.LabelSpecHash] != rb.Labels[workload.LabelSpecHash] {
 		existing.Labels = rb.Labels
 		existing.RoleRef = rb.RoleRef
 		existing.Subjects = rb.Subjects
@@ -413,7 +440,11 @@ func (r *InferenceServiceReconciler) reconcileEPPRoleBinding(ctx context.Context
 	return nil
 }
 
-func (r *InferenceServiceReconciler) reconcileEPPConfigMap(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninferiov1alpha1.Role) error {
+func (r *InferenceServiceReconciler) reconcileEPPConfigMap(
+	ctx context.Context,
+	inferSvc *fusioninferiov1alpha1.InferenceService,
+	role fusioninferiov1alpha1.Role,
+) error {
 	cm := router.BuildEPPConfigMap(inferSvc, role)
 
 	if err := controllerutil.SetControllerReference(inferSvc, cm, r.Scheme); err != nil {
@@ -429,8 +460,8 @@ func (r *InferenceServiceReconciler) reconcileEPPConfigMap(ctx context.Context, 
 		return err
 	}
 
-	// Update only if revision changed
-	if existing.Labels[workload.LabelRevision] != cm.Labels[workload.LabelRevision] {
+	// Update if spec hash changed
+	if existing.Labels[workload.LabelSpecHash] != cm.Labels[workload.LabelSpecHash] {
 		existing.Labels = cm.Labels
 		existing.Data = cm.Data
 		return r.Update(ctx, existing)
@@ -438,7 +469,10 @@ func (r *InferenceServiceReconciler) reconcileEPPConfigMap(ctx context.Context, 
 	return nil
 }
 
-func (r *InferenceServiceReconciler) reconcileEPPDeployment(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService) error {
+func (r *InferenceServiceReconciler) reconcileEPPDeployment(
+	ctx context.Context,
+	inferSvc *fusioninferiov1alpha1.InferenceService,
+) error {
 	deploy := router.BuildEPPDeployment(inferSvc)
 
 	if err := controllerutil.SetControllerReference(inferSvc, deploy, r.Scheme); err != nil {
@@ -454,8 +488,8 @@ func (r *InferenceServiceReconciler) reconcileEPPDeployment(ctx context.Context,
 		return err
 	}
 
-	// Update only if revision changed (only update mutable fields)
-	if existing.Labels[workload.LabelRevision] != deploy.Labels[workload.LabelRevision] {
+	// Update if spec hash changed
+	if existing.Labels[workload.LabelSpecHash] != deploy.Labels[workload.LabelSpecHash] {
 		existing.Labels = deploy.Labels
 		// Don't update spec.selector as it's immutable
 		existing.Spec.Template = deploy.Spec.Template
@@ -466,7 +500,10 @@ func (r *InferenceServiceReconciler) reconcileEPPDeployment(ctx context.Context,
 	return nil
 }
 
-func (r *InferenceServiceReconciler) reconcileEPPService(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService) error {
+func (r *InferenceServiceReconciler) reconcileEPPService(
+	ctx context.Context,
+	inferSvc *fusioninferiov1alpha1.InferenceService,
+) error {
 	svc := router.BuildEPPService(inferSvc)
 
 	if err := controllerutil.SetControllerReference(inferSvc, svc, r.Scheme); err != nil {
@@ -482,8 +519,8 @@ func (r *InferenceServiceReconciler) reconcileEPPService(ctx context.Context, in
 		return err
 	}
 
-	// Update only if revision changed
-	if existing.Labels[workload.LabelRevision] != svc.Labels[workload.LabelRevision] {
+	// Update if spec hash changed
+	if existing.Labels[workload.LabelSpecHash] != svc.Labels[workload.LabelSpecHash] {
 		existing.Labels = svc.Labels
 		existing.Spec.Ports = svc.Spec.Ports
 		existing.Spec.Selector = svc.Spec.Selector
@@ -492,7 +529,11 @@ func (r *InferenceServiceReconciler) reconcileEPPService(ctx context.Context, in
 	return nil
 }
 
-func (r *InferenceServiceReconciler) reconcileInferencePool(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService, workerRoles []fusioninferiov1alpha1.Role) error {
+func (r *InferenceServiceReconciler) reconcileInferencePool(
+	ctx context.Context,
+	inferSvc *fusioninferiov1alpha1.InferenceService,
+	workerRoles []fusioninferiov1alpha1.Role,
+) error {
 	pool := router.BuildInferencePool(inferSvc, workerRoles)
 
 	if err := controllerutil.SetControllerReference(inferSvc, pool, r.Scheme); err != nil {
@@ -508,8 +549,8 @@ func (r *InferenceServiceReconciler) reconcileInferencePool(ctx context.Context,
 		return err
 	}
 
-	// Update only if revision changed
-	if existing.Labels[workload.LabelRevision] != pool.Labels[workload.LabelRevision] {
+	// Update if spec hash changed
+	if existing.Labels[workload.LabelSpecHash] != pool.Labels[workload.LabelSpecHash] {
 		existing.Labels = pool.Labels
 		existing.Spec = pool.Spec
 		return r.Update(ctx, existing)
@@ -517,7 +558,11 @@ func (r *InferenceServiceReconciler) reconcileInferencePool(ctx context.Context,
 	return nil
 }
 
-func (r *InferenceServiceReconciler) reconcileHTTPRoute(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninferiov1alpha1.Role) error {
+func (r *InferenceServiceReconciler) reconcileHTTPRoute(
+	ctx context.Context,
+	inferSvc *fusioninferiov1alpha1.InferenceService,
+	role fusioninferiov1alpha1.Role,
+) error {
 	httpRoute := router.BuildHTTPRoute(inferSvc, role)
 
 	if err := controllerutil.SetControllerReference(inferSvc, httpRoute, r.Scheme); err != nil {
@@ -533,8 +578,8 @@ func (r *InferenceServiceReconciler) reconcileHTTPRoute(ctx context.Context, inf
 		return err
 	}
 
-	// Update only if revision changed
-	if existing.Labels[workload.LabelRevision] != httpRoute.Labels[workload.LabelRevision] {
+	// Update if spec hash changed
+	if existing.Labels[workload.LabelSpecHash] != httpRoute.Labels[workload.LabelSpecHash] {
 		existing.Labels = httpRoute.Labels
 		existing.Spec = httpRoute.Spec
 		return r.Update(ctx, existing)
@@ -542,9 +587,12 @@ func (r *InferenceServiceReconciler) reconcileHTTPRoute(ctx context.Context, inf
 	return nil
 }
 
-// updateComponentStatusInMemory updates the InferenceService component status in memory
-// Does NOT call Status().Update() - caller must update status
-func (r *InferenceServiceReconciler) updateComponentStatusInMemory(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService) {
+// updateComponentStatusInMemory updates the InferenceService component status in memory.
+// Does NOT call Status().Update() - caller must update status.
+func (r *InferenceServiceReconciler) updateComponentStatusInMemory(
+	ctx context.Context,
+	inferSvc *fusioninferiov1alpha1.InferenceService,
+) {
 	log := logf.FromContext(ctx)
 
 	components := make(map[string]fusioninferiov1alpha1.ComponentStatus)
@@ -588,7 +636,11 @@ func (r *InferenceServiceReconciler) checkAllComponentsReady(inferSvc *fusioninf
 }
 
 // aggregateLWSStatus aggregates status from all per-replica LWS instances for a role
-func (r *InferenceServiceReconciler) aggregateLWSStatus(ctx context.Context, inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninferiov1alpha1.Role) fusioninferiov1alpha1.ComponentStatus {
+func (r *InferenceServiceReconciler) aggregateLWSStatus(
+	ctx context.Context,
+	inferSvc *fusioninferiov1alpha1.InferenceService,
+	role fusioninferiov1alpha1.Role,
+) fusioninferiov1alpha1.ComponentStatus {
 	desiredReplicas := scheduling.GetReplicaCount(role)
 	nodesPerReplica := scheduling.GetNodeCount(role)
 

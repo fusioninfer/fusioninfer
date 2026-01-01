@@ -28,6 +28,7 @@ import (
 	lwsv1 "sigs.k8s.io/lws/api/leaderworkerset/v1"
 
 	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/core/v1alpha1"
+	"github.com/fusioninfer/fusioninfer/pkg/util"
 )
 
 const (
@@ -42,7 +43,9 @@ const (
 	LabelComponentType = "fusioninfer.io/component-type"
 	LabelRoleName      = "fusioninfer.io/role-name"
 	LabelReplicaIndex  = "fusioninfer.io/replica-index"
-	LabelRevision      = "fusioninfer.io/revision"
+	// LabelSpecHash stores the hash of the resource spec for change detection
+	// When the spec changes, the hash changes, triggering reconciliation
+	LabelSpecHash = "fusioninfer.io/spec-hash"
 
 	// Annotations for Volcano gang scheduling
 	AnnotationPodGroupName = "scheduling.k8s.io/group-name"
@@ -65,9 +68,13 @@ type LWSConfig struct {
 	ReplicaIndex *int32
 }
 
-// BuildLWS constructs a LeaderWorkerSet for the given role
-// If config.ReplicaIndex is set, creates a per-replica LWS with replicas=1
-func BuildLWS(inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninferiov1alpha1.Role, config LWSConfig) *lwsv1.LeaderWorkerSet {
+// BuildLWS constructs a LeaderWorkerSet for the given role.
+// If config.ReplicaIndex is set, creates a per-replica LWS with replicas=1.
+func BuildLWS(
+	inferSvc *fusioninferiov1alpha1.InferenceService,
+	role fusioninferiov1alpha1.Role,
+	config LWSConfig,
+) *lwsv1.LeaderWorkerSet {
 	// Generate LWS name (includes replica index for per-replica mode)
 	lwsName := GenerateLWSNameWithIndex(inferSvc.Name, role.Name, config.ReplicaIndex)
 
@@ -85,12 +92,11 @@ func BuildLWS(inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninfer
 		replicas = *role.Replicas
 	}
 
-	// Build labels with revision for update detection
+	// Build base labels (without spec hash, which will be added after spec is built)
 	labels := map[string]string{
 		LabelService:       inferSvc.Name,
 		LabelComponentType: string(role.ComponentType),
 		LabelRoleName:      role.Name,
-		LabelRevision:      fmt.Sprintf("%d", inferSvc.Generation),
 	}
 
 	// Add replica index label for per-replica mode
@@ -120,6 +126,9 @@ func BuildLWS(inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninfer
 		Spec: lwsv1.LeaderWorkerSetSpec{
 			Replicas:      ptr.To(replicas),
 			StartupPolicy: lwsv1.LeaderCreatedStartupPolicy,
+			RolloutStrategy: lwsv1.RolloutStrategy{
+				Type: lwsv1.RollingUpdateStrategyType,
+			},
 			LeaderWorkerTemplate: lwsv1.LeaderWorkerTemplate{
 				Size: ptr.To(size),
 				WorkerTemplate: corev1.PodTemplateSpec{
@@ -147,6 +156,10 @@ func BuildLWS(inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninfer
 			Spec: leaderPodSpec,
 		}
 	}
+
+	// Compute spec hash after the spec is fully built and set it as a label
+	specHash := util.ComputeSpecHash(lws.Spec)
+	lws.Labels[LabelSpecHash] = specHash
 
 	return lws
 }
@@ -254,13 +267,4 @@ func GenerateLWSNameWithIndex(inferSvcName, roleName string, replicaIndex *int32
 // IsMultiNode returns true if the role is configured for multi-node deployment
 func IsMultiNode(role fusioninferiov1alpha1.Role) bool {
 	return role.Multinode != nil && role.Multinode.NodeCount >= 2
-}
-
-// getNodeCount returns the node count for a role, defaulting to 1
-// This is a local helper; for external use, call scheduling.GetNodeCount()
-func getNodeCount(role fusioninferiov1alpha1.Role) int32 {
-	if role.Multinode != nil && role.Multinode.NodeCount >= 1 {
-		return role.Multinode.NodeCount
-	}
-	return 1
 }

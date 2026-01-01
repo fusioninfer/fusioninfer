@@ -193,4 +193,3 @@ func TestGenerateEPPConfig_DefaultStrategy(t *testing.T) {
 		t.Error("expected default strategy to be prefix-cache")
 	}
 }
-

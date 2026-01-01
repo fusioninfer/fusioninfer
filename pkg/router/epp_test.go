@@ -17,7 +17,6 @@ limitations under the License.
 package router
 
 import (
-	"os"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -27,11 +26,17 @@ import (
 	"github.com/fusioninfer/fusioninfer/pkg/workload"
 )
 
+const (
+	testNamespace   = "default"
+	testServiceName = "test-service"
+	testEPPName     = "test-service-epp"
+)
+
 func TestBuildEPPConfigMap(t *testing.T) {
 	inferSvc := &fusioninferiov1alpha1.InferenceService{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-service",
-			Namespace: "default",
+			Name:      testServiceName,
+			Namespace: testNamespace,
 		},
 	}
 
@@ -50,13 +55,14 @@ func TestBuildEPPConfigMap(t *testing.T) {
 	}
 
 	// Verify namespace
-	if cm.Namespace != "default" {
-		t.Errorf("expected namespace 'default', got %s", cm.Namespace)
+	if cm.Namespace != testNamespace {
+		t.Errorf("expected namespace %s, got %s", testNamespace, cm.Namespace)
 	}
 
 	// Verify label
-	if cm.Labels[workload.LabelService] != "test-service" {
-		t.Errorf("expected label %s=%s, got %s", workload.LabelService, "test-service", cm.Labels[workload.LabelService])
+	if cm.Labels[workload.LabelService] != testServiceName {
+		t.Errorf("expected label %s=%s, got %s",
+			workload.LabelService, testServiceName, cm.Labels[workload.LabelService])
 	}
 
 	// Verify config file exists
@@ -68,27 +74,25 @@ func TestBuildEPPConfigMap(t *testing.T) {
 func TestBuildEPPDeployment(t *testing.T) {
 	// Set EPP image env var for test
 	testImage := "ghcr.io/kubernetes-sigs/gateway-api-inference-extension/epp:v1.2.1"
-	os.Setenv(EnvEPPImage, testImage)
-	defer os.Unsetenv(EnvEPPImage)
+	t.Setenv(EnvEPPImage, testImage)
 
 	inferSvc := &fusioninferiov1alpha1.InferenceService{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-service",
-			Namespace: "default",
+			Name:      testServiceName,
+			Namespace: testNamespace,
 		},
 	}
 
 	deploy := BuildEPPDeployment(inferSvc)
 
 	// Verify Deployment name
-	expectedName := "test-service-epp"
-	if deploy.Name != expectedName {
-		t.Errorf("expected Deployment name %s, got %s", expectedName, deploy.Name)
+	if deploy.Name != testEPPName {
+		t.Errorf("expected Deployment name %s, got %s", testEPPName, deploy.Name)
 	}
 
 	// Verify namespace
-	if deploy.Namespace != "default" {
-		t.Errorf("expected namespace 'default', got %s", deploy.Namespace)
+	if deploy.Namespace != testNamespace {
+		t.Errorf("expected namespace %s, got %s", testNamespace, deploy.Namespace)
 	}
 
 	// Verify replicas
@@ -125,8 +129,9 @@ func TestBuildEPPDeployment(t *testing.T) {
 	}
 
 	// Verify ServiceAccountName
-	if deploy.Spec.Template.Spec.ServiceAccountName != expectedName {
-		t.Errorf("expected ServiceAccountName %s, got %s", expectedName, deploy.Spec.Template.Spec.ServiceAccountName)
+	if deploy.Spec.Template.Spec.ServiceAccountName != testEPPName {
+		t.Errorf("expected ServiceAccountName %s, got %s",
+			testEPPName, deploy.Spec.Template.Spec.ServiceAccountName)
 	}
 
 	// Verify volume mount
@@ -157,22 +162,21 @@ func TestBuildEPPDeployment(t *testing.T) {
 func TestBuildEPPService(t *testing.T) {
 	inferSvc := &fusioninferiov1alpha1.InferenceService{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-service",
-			Namespace: "default",
+			Name:      testServiceName,
+			Namespace: testNamespace,
 		},
 	}
 
 	svc := BuildEPPService(inferSvc)
 
 	// Verify Service name
-	expectedName := "test-service-epp"
-	if svc.Name != expectedName {
-		t.Errorf("expected Service name %s, got %s", expectedName, svc.Name)
+	if svc.Name != testEPPName {
+		t.Errorf("expected Service name %s, got %s", testEPPName, svc.Name)
 	}
 
 	// Verify namespace
-	if svc.Namespace != "default" {
-		t.Errorf("expected namespace 'default', got %s", svc.Namespace)
+	if svc.Namespace != testNamespace {
+		t.Errorf("expected namespace %s, got %s", testNamespace, svc.Namespace)
 	}
 
 	// Verify service type
@@ -181,8 +185,8 @@ func TestBuildEPPService(t *testing.T) {
 	}
 
 	// Verify selector
-	if svc.Spec.Selector["app"] != expectedName {
-		t.Errorf("expected selector app=%s, got %s", expectedName, svc.Spec.Selector["app"])
+	if svc.Spec.Selector["app"] != testEPPName {
+		t.Errorf("expected selector app=%s, got %s", testEPPName, svc.Spec.Selector["app"])
 	}
 
 	// Verify ports
@@ -211,27 +215,27 @@ func TestBuildEPPService(t *testing.T) {
 func TestBuildEPPServiceAccount(t *testing.T) {
 	inferSvc := &fusioninferiov1alpha1.InferenceService{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-service",
-			Namespace: "default",
+			Name:      testServiceName,
+			Namespace: testNamespace,
 		},
 	}
 
 	sa := BuildEPPServiceAccount(inferSvc)
 
 	// Verify ServiceAccount name
-	expectedName := "test-service-epp"
-	if sa.Name != expectedName {
-		t.Errorf("expected ServiceAccount name %s, got %s", expectedName, sa.Name)
+	if sa.Name != testEPPName {
+		t.Errorf("expected ServiceAccount name %s, got %s", testEPPName, sa.Name)
 	}
 
 	// Verify namespace
-	if sa.Namespace != "default" {
-		t.Errorf("expected namespace 'default', got %s", sa.Namespace)
+	if sa.Namespace != testNamespace {
+		t.Errorf("expected namespace %s, got %s", testNamespace, sa.Namespace)
 	}
 
 	// Verify label
-	if sa.Labels[workload.LabelService] != "test-service" {
-		t.Errorf("expected label %s=%s, got %s", workload.LabelService, "test-service", sa.Labels[workload.LabelService])
+	if sa.Labels[workload.LabelService] != testServiceName {
+		t.Errorf("expected label %s=%s, got %s",
+			workload.LabelService, testServiceName, sa.Labels[workload.LabelService])
 	}
 }
 
@@ -281,8 +285,7 @@ func TestGetEPPImage(t *testing.T) {
 	// Test image from env var
 	t.Run("image from env", func(t *testing.T) {
 		customImage := "my-registry.io/epp:custom-tag"
-		os.Setenv(EnvEPPImage, customImage)
-		defer os.Unsetenv(EnvEPPImage)
+		t.Setenv(EnvEPPImage, customImage)
 
 		got := GetEPPImage()
 		if got != customImage {
@@ -290,10 +293,8 @@ func TestGetEPPImage(t *testing.T) {
 		}
 	})
 
-	// Test default when env var is not set
+	// Test default when env var is not set - parent test doesn't set env var
 	t.Run("default when env not set", func(t *testing.T) {
-		os.Unsetenv(EnvEPPImage)
-
 		got := GetEPPImage()
 		if got != DefaultEPPImage {
 			t.Errorf("GetEPPImage() = %s, want %s", got, DefaultEPPImage)

@@ -23,6 +23,7 @@ import (
 	inferenceapi "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 
 	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/core/v1alpha1"
+	"github.com/fusioninfer/fusioninfer/pkg/util"
 	"github.com/fusioninfer/fusioninfer/pkg/workload"
 )
 
@@ -36,7 +37,10 @@ const (
 )
 
 // BuildInferencePool constructs an InferencePool that selects worker pods
-func BuildInferencePool(inferSvc *fusioninferiov1alpha1.InferenceService, workerRoles []fusioninferiov1alpha1.Role) *inferenceapi.InferencePool {
+func BuildInferencePool(
+	inferSvc *fusioninferiov1alpha1.InferenceService,
+	workerRoles []fusioninferiov1alpha1.Role,
+) *inferenceapi.InferencePool {
 	poolName := GeneratePoolName(inferSvc.Name)
 	eppServiceName := GenerateEPPServiceName(inferSvc.Name)
 
@@ -48,8 +52,7 @@ func BuildInferencePool(inferSvc *fusioninferiov1alpha1.InferenceService, worker
 			Name:      poolName,
 			Namespace: inferSvc.Namespace,
 			Labels: map[string]string{
-				workload.LabelService:  inferSvc.Name,
-				workload.LabelRevision: fmt.Sprintf("%d", inferSvc.Generation),
+				workload.LabelService: inferSvc.Name,
 			},
 		},
 		Spec: inferenceapi.InferencePoolSpec{
@@ -68,11 +71,17 @@ func BuildInferencePool(inferSvc *fusioninferiov1alpha1.InferenceService, worker
 		},
 	}
 
+	// Compute spec hash after the spec is fully built
+	pool.Labels[workload.LabelSpecHash] = util.ComputeSpecHash(pool.Spec)
+
 	return pool
 }
 
 // buildPoolSelector builds the label selector for the InferencePool
-func buildPoolSelector(inferSvc *fusioninferiov1alpha1.InferenceService, workerRoles []fusioninferiov1alpha1.Role) inferenceapi.LabelSelector {
+func buildPoolSelector(
+	inferSvc *fusioninferiov1alpha1.InferenceService,
+	workerRoles []fusioninferiov1alpha1.Role,
+) inferenceapi.LabelSelector {
 	// Select pods belonging to this InferenceService
 	matchLabels := map[inferenceapi.LabelKey]inferenceapi.LabelValue{
 		inferenceapi.LabelKey(workload.LabelService): inferenceapi.LabelValue(inferSvc.Name),
@@ -80,7 +89,8 @@ func buildPoolSelector(inferSvc *fusioninferiov1alpha1.InferenceService, workerR
 
 	// If there's only one worker role, also match by component type
 	if len(workerRoles) == 1 {
-		matchLabels[inferenceapi.LabelKey(workload.LabelComponentType)] = inferenceapi.LabelValue(workerRoles[0].ComponentType)
+		compType := workerRoles[0].ComponentType
+		matchLabels[inferenceapi.LabelKey(workload.LabelComponentType)] = inferenceapi.LabelValue(compType)
 	}
 
 	// Only select leader pods (worker-index=0) for routing

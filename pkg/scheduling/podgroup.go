@@ -25,6 +25,7 @@ import (
 	schedulingv1beta1 "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
 
 	fusioninferiov1alpha1 "github.com/fusioninfer/fusioninfer/api/core/v1alpha1"
+	"github.com/fusioninfer/fusioninfer/pkg/util"
 	"github.com/fusioninfer/fusioninfer/pkg/workload"
 )
 
@@ -69,7 +70,10 @@ func NeedsGangScheduling(inferSvc *fusioninferiov1alpha1.InferenceService) bool 
 }
 
 // NeedsGangSchedulingForRole returns true if the specific role requires gang scheduling
-func NeedsGangSchedulingForRole(inferSvc *fusioninferiov1alpha1.InferenceService, role fusioninferiov1alpha1.Role) bool {
+func NeedsGangSchedulingForRole(
+	inferSvc *fusioninferiov1alpha1.InferenceService,
+	role fusioninferiov1alpha1.Role,
+) bool {
 	// PD disaggregated: prefiller and decoder need gang scheduling
 	if IsPDDisaggregated(inferSvc) {
 		return role.ComponentType == fusioninferiov1alpha1.ComponentTypePrefiller ||
@@ -135,8 +139,7 @@ func BuildPodGroup(inferSvc *fusioninferiov1alpha1.InferenceService) *scheduling
 			Name:      pgName,
 			Namespace: inferSvc.Namespace,
 			Labels: map[string]string{
-				workload.LabelService:  inferSvc.Name,
-				workload.LabelRevision: fmt.Sprintf("%d", inferSvc.Generation),
+				workload.LabelService: inferSvc.Name,
 			},
 		},
 		Spec: schedulingv1beta1.PodGroupSpec{
@@ -145,6 +148,9 @@ func BuildPodGroup(inferSvc *fusioninferiov1alpha1.InferenceService) *scheduling
 			MinResources:  &minResources,
 		},
 	}
+
+	// Compute spec hash after the spec is fully built
+	pg.Labels[workload.LabelSpecHash] = util.ComputeSpecHash(pg.Spec)
 
 	return pg
 }
