@@ -157,9 +157,9 @@ func TestBuildLWS(t *testing.T) {
 			t.Fatal("expected LeaderTemplate to be set for multi-node deployment")
 		}
 
-		// Verify leader container command
+		// Verify leader container command (uses default "vllm serve" when command is empty)
 		leaderContainer := lws.Spec.LeaderWorkerTemplate.LeaderTemplate.Spec.Containers[0]
-		expectedLeaderCmd := "ray start --head --port=6379 &&  --model Qwen/Qwen3-8B --distributed-executor-backend ray"
+		expectedLeaderCmd := "ray start --head --port=6379 && vllm serve --model Qwen/Qwen3-8B --distributed-executor-backend ray"
 		if leaderContainer.Args[0] != expectedLeaderCmd {
 			t.Errorf("leader command mismatch.\nExpected: %s\nGot: %s", expectedLeaderCmd, leaderContainer.Args[0])
 		}
@@ -323,8 +323,8 @@ func TestWrapLeaderContainer(t *testing.T) {
 			t.Errorf("expected command [/bin/sh -c], got %v", container.Command)
 		}
 
-		// Verify the complete generated command
-		expectedCmd := "ray start --head --port=6379 &&  --model Qwen/Qwen3-8B --distributed-executor-backend ray"
+		// Verify the complete generated command (uses default "vllm serve" when command is empty)
+		expectedCmd := "ray start --head --port=6379 && vllm serve --model Qwen/Qwen3-8B --distributed-executor-backend ray"
 		if container.Args[0] != expectedCmd {
 			t.Errorf("command mismatch.\nExpected: %s\nGot: %s", expectedCmd, container.Args[0])
 		}

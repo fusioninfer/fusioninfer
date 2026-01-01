@@ -177,6 +177,12 @@ func wrapLeaderContainer(container *corev1.Container) {
 	originalCmd := strings.Join(container.Command, " ")
 	originalArgs := strings.Join(container.Args, " ")
 
+	// If no command specified, use default vLLM serve command
+	// This handles vllm-openai images where only args are provided
+	if originalCmd == "" {
+		originalCmd = "vllm serve"
+	}
+
 	// Check if --distributed-executor-backend is already specified
 	hasBackendFlag := strings.Contains(originalArgs, "distributed-executor-backend")
 	vllmMultinodeFlags := ""
