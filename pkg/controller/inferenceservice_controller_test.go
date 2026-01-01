@@ -45,15 +45,14 @@ func createTemplateRaw(template corev1.PodTemplateSpec) *runtime.RawExtension {
 	return &runtime.RawExtension{Raw: data}
 }
 
-// createTestInferenceService creates a basic InferenceService for testing.
-// The namespace parameter is kept for flexibility even though tests currently use "default".
-func createTestInferenceService(name, namespace, image string, replicas int32) *fusioninferiov1alpha1.InferenceService { //nolint:unparam
+// createTestInferenceService creates a basic InferenceService for testing in the default namespace.
+func createTestInferenceService(name string) *fusioninferiov1alpha1.InferenceService {
 	template := corev1.PodTemplateSpec{
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
 				{
 					Name:  "vllm",
-					Image: image,
+					Image: "vllm/vllm-openai:v0.13.0",
 					Args:  []string{"--model", "Qwen/Qwen3-8B"},
 					Resources: corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{
@@ -68,14 +67,14 @@ func createTestInferenceService(name, namespace, image string, replicas int32) *
 	return &fusioninferiov1alpha1.InferenceService{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
-			Namespace: namespace,
+			Namespace: "default",
 		},
 		Spec: fusioninferiov1alpha1.InferenceServiceSpec{
 			Roles: []fusioninferiov1alpha1.Role{
 				{
 					Name:          "inference",
 					ComponentType: fusioninferiov1alpha1.ComponentTypeWorker,
-					Replicas:      ptr.To(replicas),
+					Replicas:      ptr.To(int32(1)),
 					Template:      createTemplateRaw(template),
 				},
 			},
@@ -108,7 +107,7 @@ var _ = Describe("InferenceService Controller", func() {
 
 		It("should create LWS when InferenceService is created", func() {
 			By("Creating InferenceService")
-			inferSvc := createTestInferenceService(resourceName, "default", "vllm/vllm-openai:v0.13.0", 1)
+			inferSvc := createTestInferenceService(resourceName)
 			Expect(k8sClient.Create(ctx, inferSvc)).To(Succeed())
 
 			By("Waiting for LWS to be created")
@@ -131,7 +130,7 @@ var _ = Describe("InferenceService Controller", func() {
 			typeNamespacedName := types.NamespacedName{Name: inferSvcName, Namespace: "default"}
 
 			By("Creating InferenceService with 1 replica")
-			inferSvc := createTestInferenceService(inferSvcName, "default", "vllm/vllm-openai:v0.13.0", 1)
+			inferSvc := createTestInferenceService(inferSvcName)
 			Expect(k8sClient.Create(ctx, inferSvc)).Should(Succeed())
 
 			By("Waiting for first LWS to be created")
@@ -169,7 +168,7 @@ var _ = Describe("InferenceService Controller", func() {
 			typeNamespacedName := types.NamespacedName{Name: inferSvcName, Namespace: "default"}
 
 			By("Creating InferenceService")
-			inferSvc := createTestInferenceService(inferSvcName, "default", "vllm/vllm-openai:v0.13.0", 1)
+			inferSvc := createTestInferenceService(inferSvcName)
 			Expect(k8sClient.Create(ctx, inferSvc)).Should(Succeed())
 
 			By("Waiting for LWS to be created")
@@ -226,7 +225,7 @@ var _ = Describe("InferenceService Controller", func() {
 			typeNamespacedName := types.NamespacedName{Name: inferSvcName, Namespace: "default"}
 
 			By("Creating InferenceService")
-			inferSvc := createTestInferenceService(inferSvcName, "default", "vllm/vllm-openai:v0.13.0", 1)
+			inferSvc := createTestInferenceService(inferSvcName)
 			Expect(k8sClient.Create(ctx, inferSvc)).Should(Succeed())
 
 			By("Waiting for LWS to be created")
@@ -278,7 +277,7 @@ var _ = Describe("InferenceService Controller", func() {
 			typeNamespacedName := types.NamespacedName{Name: inferSvcName, Namespace: "default"}
 
 			By("Creating InferenceService")
-			inferSvc := createTestInferenceService(inferSvcName, "default", "vllm/vllm-openai:v0.13.0", 1)
+			inferSvc := createTestInferenceService(inferSvcName)
 			Expect(k8sClient.Create(ctx, inferSvc)).Should(Succeed())
 
 			By("Waiting for LWS to be created")
