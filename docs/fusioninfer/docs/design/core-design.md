@@ -20,7 +20,6 @@ Modern LLM serving systems increasingly adopt **disaggregation** (separating pre
 ### Goals
 
 - Define a single CRD that supports both monolithic and disaggregated inference topologies.
-- Use a componentType field to express the logical role (`worker`, `prefiller`, `decoder`, `router`), while allowing flexible name.
 - Allow per component specification of replicas, node count, container templates, and resources.
 - Integrate with an **EPP scheduling framework** for request scheduling at the gateway.
 - Enable multi-node deployment for prefill/decode components to scale across GPUs/nodes.
@@ -218,12 +217,13 @@ Users declare **roles** (a list of components), each identified by a user-chosen
 | `worker` | Monolithic inference (full request lifecycle) |
 | `prefiller` | Handles prompt ingestion and KV cache generation |
 | `decoder` | Performs autoregressive token generation |
+| `router` | Request router with EPP scheduling plugins |
 
 ### Reconciliation Logic
 
 The following diagrams illustrate the resource topology for different deployment scenarios.
 
-#### Monolithic Deployment (Story 1)
+#### Monolithic Deployment
 
 A simple single-role deployment where each pod handles the full inference lifecycle.
 
@@ -252,7 +252,7 @@ A simple single-role deployment where each pod handles the full inference lifecy
       Total: 1 replica × 1 node × 1 GPU = 1 GPU
 ```
 
-#### Disaggregated PD Deployment (Story 2)
+#### Disaggregated PD Deployment
 
 Prefill and decode are separated into independent roles for better resource utilization.
 
@@ -295,7 +295,7 @@ Prefill and decode are separated into independent roles for better resource util
       Total: prefill (2 × 1 GPU) + decode (4 × 1 GPU) = 6 GPUs
 ```
 
-#### Multi-Node Deployment (Story 3)
+#### Multi-Node Deployment
 
 Large model deployment using LeaderWorkerSet (LWS) for multi-node tensor parallelism.
 
@@ -336,50 +336,49 @@ Large model deployment using LeaderWorkerSet (LWS) for multi-node tensor paralle
       Total: inference (2 replicas × 4 nodes × 8 GPUs) = 8 pods, 64 GPUs
 ```
 
-#### Disaggregated Multi-Node Deployment (Story 4)
+#### Disaggregated Multi-Node Deployment
 
 Combines prefill/decode disaggregation with multi-node parallelism for maximum scalability.
 
 ```
-┌───────────────────────────────────────────────────────────────────────────────────────┐
-│                                  InferenceService                                     │
-│                              name: deepseek-r1-disagg                                 │
-└─────────────────────────────────────────┬─────────────────────────────────────────────┘
-                                         │
-                          ┌──────────────┴──────────────┐
-                          │          Roles (2)          │
-                          └──────────────┬──────────────┘
-                                         │
-             ┌────────────────────────────┼────────────────────────────┐
-             │                                                         │
-             ▼                                                         ▼
-┌───────────────────────┐                             ┌───────────────────────┐
-│    Role: prefill      │                             │    Role: decode       │
-│ componentType:        │                             │ componentType:        │
-│   prefiller           │                             │   decoder             │
-│ replicas: 1           │                             │ replicas: 2           │
-│ multinode:            │                             │ multinode:            │
-│   nodeCount: 2        │                             │   nodeCount: 4        │
-└───────────┬───────────┘                             └───────────┬───────────┘
-            │                                                     │
-            ▼                                         ┌───────────┴───────────┐
-┌─────────────────────┐                               │                       │
-│  LeaderWorkerSet-0  │                               ▼                       ▼
-│     (2 Pods)        │                 ┌─────────────────────┐ ┌─────────────────────┐
-│   TP=16 across      │                 │  LeaderWorkerSet-0  │ │  LeaderWorkerSet-1  │
-│   16 GPUs           │                 │     (4 Pods)        │ │     (4 Pods)        │
-├─────────────────────┤                 │   TP=32 across      │ │   TP=32 across      │
-│ ★ Leader Pod-0      │                 │   32 GPUs           │ │   32 GPUs           │
-│   [8 GPUs]          │                 ├─────────────────────┤ ├─────────────────────┤
-│ ● Worker Pod-1      │                 │ ★ Leader Pod-0      │ │ ★ Leader Pod-0      │
-│   [8 GPUs]          │                 │   [8 GPUs]          │ │   [8 GPUs]          │
-└─────────────────────┘                 │ ● Worker Pod-1      │ │ ● Worker Pod-1      │
-                                        │   [8 GPUs]          │ │   [8 GPUs]          │
-                                        │ ● Worker Pod-2      │ │ ● Worker Pod-2      │
-                                        │   [8 GPUs]          │ │   [8 GPUs]          │
-                                        │ ● Worker Pod-3      │ │ ● Worker Pod-3      │
-                                        │   [8 GPUs]          │ │   [8 GPUs]          │
-                                        └─────────────────────┘ └─────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                                    InferenceService                                     │
+│                                name: deepseek-r1-disagg                                 │
+└────────────────────────────────────────────┬────────────────────────────────────────────┘
+                                             │
+                              ┌──────────────┴──────────────┐
+                              │          Roles (2)          │
+                              └──────────────┬──────────────┘
+                                             │
+                 ┌───────────────────────────┴───────────────────────────┐
+                 │                                                       │
+                 ▼                                                       ▼
+┌───────────────────────────┐                           ┌───────────────────────────┐
+│      Role: prefill        │                           │      Role: decode         │
+│  componentType: prefiller │                           │  componentType: decoder   │
+│  replicas: 1              │                           │  replicas: 2              │
+│  multinode:               │                           │  multinode:               │
+│    nodeCount: 2           │                           │    nodeCount: 4           │
+└─────────────┬─────────────┘                           └─────────────┬─────────────┘
+              │                                                       │
+              ▼                                           ┌───────────┴───────────┐
+┌─────────────────────────┐                               │                       │
+│    LeaderWorkerSet-0    │                               ▼                       ▼
+│       (2 Pods)          │                 ┌───────────────────────┐ ┌───────────────────────┐
+│    TP=16 across         │                 │   LeaderWorkerSet-0   │ │   LeaderWorkerSet-1   │
+│    16 GPUs              │                 │       (4 Pods)        │ │       (4 Pods)        │
+├─────────────────────────┤                 │    TP=32 across       │ │    TP=32 across       │
+│  ★ Leader Pod-0         │                 │    32 GPUs            │ │    32 GPUs            │
+│    [8 GPUs]             │                 ├───────────────────────┤ ├───────────────────────┤
+│  ● Worker Pod-1         │                 │  ★ Leader Pod-0       │ │  ★ Leader Pod-0       │
+│    [8 GPUs]             │                 │    [8 GPUs]           │ │    [8 GPUs]           │
+└─────────────────────────┘                 │  ● Worker Pod-1       │ │  ● Worker Pod-1       │
+                                            │    [8 GPUs]           │ │    [8 GPUs]           │
+                                            │  ● Worker Pod-2       │ │  ● Worker Pod-2       │
+                                            │    [8 GPUs]           │ │    [8 GPUs]           │
+                                            │  ● Worker Pod-3       │ │  ● Worker Pod-3       │
+                                            │    [8 GPUs]           │ │    [8 GPUs]           │
+                                            └───────────────────────┘ └───────────────────────┘
 
       Total: prefill (1 × 2 nodes × 8 GPUs) + decode (2 × 4 nodes × 8 GPUs) = 16 + 64 = 80 GPUs
 ```
@@ -390,16 +389,17 @@ The controller uses **LeaderWorkerSet (LWS)** for all deployments to provide uni
 
 | Configuration | LWS Mode | LWS Size | Scheduler | Description |
 |---------------|----------|----------|-----------|-------------|
-| `multinode` not set | Normal | `size: 1` | default | Single pod per replica |
+| `multinode` not set | Per-replica | `size: 1` | default | Single pod per replica |
 | `multinode.nodeCount >= 2` (monolithic) | Per-replica | `size: nodeCount` | volcano | One LWS per replica for independent scheduling |
-| PD disaggregated | Normal | `size: nodeCount` | volcano | Shared PodGroup across prefill/decode roles |
+| PD disaggregated | Per-replica | `size: nodeCount` | volcano | Shared PodGroup across prefill/decode roles |
 
-**LWS Modes:**
+**LWS Mode:**
+
+The controller always uses **Per-replica mode** (one LWS per replica) to support fine-grained scaling and cleanup.
 
 | Mode | LWS Count | PodGroup Count | Use Case |
 |------|-----------|----------------|----------|
-| **Per-replica** | N per role (one per replica) | 1 shared | All gang scheduling scenarios (multi-node, PD disaggregated) |
-| **Normal** | 1 per role | 0 | Single-node without gang scheduling |
+| **Per-replica** | N per role (one per replica) | 1 shared (if gang scheduling needed) | All deployment scenarios |
 
 **Labels injected by Controller:**
 
@@ -409,7 +409,7 @@ The controller uses **LeaderWorkerSet (LWS)** for all deployments to provide uni
 | `fusioninfer.io/component-type` | Component type (worker/prefiller/decoder) |
 | `fusioninfer.io/role-name` | Role name from spec |
 | `fusioninfer.io/replica-index` | Replica index (only in per-replica mode) |
-| `fusioninfer.io/revision` | InferenceService generation for update detection |
+| `fusioninfer.io/spec-hash` | Hash of resource spec for change detection |
 
 **Naming Convention:**
 
@@ -705,46 +705,9 @@ spec:
 
 **Task-spec format:** `{roleName}-{replicaIndex}` (e.g., `prefill-0`, `decode-1`)
 
-**How Volcano Scheduler uses these annotations:**
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Pod Annotations                          │
-│                                                                  │
-│  scheduling.k8s.io/group-name: qwen3-inference                  │
-│  volcano.sh/task-spec: prefill-0                                 │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     Volcano Scheduler                            │
-│                                                                  │
-│  1. getJobID() → Find PodGroup by group-name annotation          │
-│  2. getTaskName() → Get task name from task-spec annotation      │
-│  3. Check PodGroup.spec.minTaskMember[taskName] >= required      │
-│  4. Gang schedule only if ALL pods in task meet minTaskMember    │
-└─────────────────────────────────────────────────────────────────┘
-```
-
 **References:**
 - [Volcano MinTaskMember Design](https://github.com/volcano-sh/volcano/blob/master/docs/design/task-minavailable.md)
 - [Volcano Gang Scheduling](https://volcano.sh/en/docs/gang_scheduling/)
-
-**Benefits of this approach:**
-
-| Aspect | Solution |
-|--------|----------|
-| Pod lifecycle | LWS manages (failure recovery, env injection, multi-node coordination) |
-| Gang scheduling | Single shared PodGroup with `{roleName}-{replicaIndex}` keys ensures both intra-replica atomicity and cross-role coordination |
-| Independent scaling | Each replica can be scheduled independently when resources allow |
-| Code reuse | Leverages LWS instead of reimplementing pod management |
-
-#### InferenceService Controller responsibilities
-
-1. **Create PodGroup** - One per InferenceService, with `minTaskMember` keys in format `{roleName}-{replicaIndex}`
-2. **Create LWS per replica** - One LWS per replica with annotations (`scheduling.k8s.io/group-name`, `volcano.sh/task-spec: {roleName}-{replicaIndex}`)
-3. **Update PodGroup** - Adjust `minTaskMember` when role replicas change
-4. **Aggregate status** - Monitor all LWS and PodGroup states, update InferenceService status
 
 ### CRD Structure Overview
 
@@ -799,6 +762,10 @@ type Role struct {
     // HTTPRoute defines the HTTPRoute spec for routing traffic (Gateway API)
     // +optional
     HTTPRoute *runtime.RawExtension `json:"httproute,omitempty"`
+    
+    // Gateway defines the Gateway spec for this router (Gateway API GatewaySpec)
+    // +optional
+    Gateway *runtime.RawExtension `json:"gateway,omitempty"`
     
     // EndpointPickerConfig is raw YAML for advanced EPP customization
     // +optional

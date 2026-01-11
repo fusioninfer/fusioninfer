@@ -55,6 +55,10 @@ const config: Config = {
   themes: ['@docusaurus/theme-mermaid'],
 
   themeConfig: {
+    tableOfContents: {
+      minHeadingLevel: 2,
+      maxHeadingLevel: 5,
+    },
     image: 'img/fusioninfer-logo.jpeg',
     navbar: {
       title: 'FusionInfer',
