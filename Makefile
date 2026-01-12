@@ -90,6 +90,10 @@ test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expect
 cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
 	@$(KIND) delete cluster --name $(KIND_CLUSTER)
 
+.PHONY: test-e2e-run
+test-e2e-run: manifests generate ## Run e2e tests without cluster management
+	go test -tags=e2e ./test/e2e/... -v -ginkgo.v -timeout 20m
+
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
 	$(GOLANGCI_LINT) run
