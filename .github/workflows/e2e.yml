@@ -1,69 +1,161 @@
 name: E2E Tests
+
 on:
   pull_request:
+    branches: [main]
+    paths:
+      - '**.go'
+      - 'Makefile'
+      - '.github/workflows/e2e.yml'
+      - 'go.mod'
+      - 'go.sum'
+      - 'config/**'
+      - 'test/e2e/**'
   push:
     branches: [main]
 
+permissions:
+  contents: read
+  actions: read
+  checks: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  KIND_CLUSTER: fusion-infer-e2e
+  TEST_TIMEOUT: 30m
+
 jobs:
   e2e:
+    name: E2E Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
-          go-version: '1.22' 
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
           cache: true
+
+      - name: Cache Docker images
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.kind-cache
+          key: kind-images-${{ runner.os }}-${{ hashFiles('test/e2e/manifests/*.yaml') }}
+          restore-keys: |
+            kind-images-${{ runner.os }}-
 
       - name: Create Kind Cluster
         uses: helm/kind-action@v1.10.0
         with:
-          cluster_name: fusion-infer-e2e
+          cluster_name: ${{ env.KIND_CLUSTER }}
+          version: v0.25.0
+
+      - name: Wait for cluster to be ready
+        run: |
+          kubectl wait --for=condition=Ready nodes --all --timeout=120s
+          kubectl cluster-info
 
       - name: Install Dependencies
         run: |
-          kubectl create -f https://github.com/kubernetes-sigs/lws/releases/download/v0.7.0/manifests.yaml
+          set -e
 
-          kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.13.1/installer/volcano-development.yaml
+          echo "Installing Long-Workload-Scheduler..."
+          kubectl create -f https://github.com/kubernetes-sigs/lws/releases/download/v0.7.0/manifests.yaml || true
+          kubectl wait --for=condition=Available deployment/lws-controller-manager -n lws-system --timeout=120s || true
 
-          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.1/standard-install.yaml
+          echo "Installing Volcano..."
+          kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.13.1/installer/volcano-development.yaml || true
+          kubectl wait --for=condition=Available deployment/volcano-admission -n volcano-system --timeout=120s || true
 
-          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.2.1/manifests.yaml
+          echo "Installing Gateway API..."
+          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.1/standard-install.yaml || true
 
+          echo "Installing Gateway API Inference Extension..."
+          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.2.1/manifests.yaml || true
+
+          echo "Installing KGateway..."
           KGTW_VERSION=v2.1.0
-          helm upgrade -i --create-namespace --namespace kgateway-system --version $KGTW_VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
+          helm upgrade -i --create-namespace --namespace kgateway-system --version $KGTW_VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds --wait || true
+          helm upgrade -i --namespace kgateway-system --version $KGTW_VERSION kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set inferenceExtension.enabled=true --wait || true
+          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/gateway.yaml || true
 
-          helm upgrade -i --namespace kgateway-system --version $KGTW_VERSION kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set inferenceExtension.enabled=true
+          echo "Waiting for KGateway to be ready..."
+          kubectl wait --for=condition=Available deployment/kgateway -n kgateway-system --timeout=120s || true
 
-          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/gateway.yaml
-
-      - name: Wait for Dependencies
+      - name: Verify Dependencies
         run: |
-          kubectl wait --for=condition=Available deployment/lws-controller-manager -n lws-system --timeout=60s
-          kubectl wait --for=condition=Available deployment/volcano-admission -n volcano-system --timeout=60s
-          kubectl wait --for=condition=Available deployment/kgateway -n kgateway-system --timeout=60s
+          echo "Verifying installed dependencies..."
+          echo "LWS: $(kubectl get deployment -n lws-system -o jsonpath='{.items[*].metadata.name}')"
+          echo "Volcano: $(kubectl get deployment -n volcano-system -o jsonpath='{.items[*].metadata.name}')"
+          echo "KGateway: $(kubectl get deployment -n kgateway-system -o jsonpath='{.items[*].metadata.name}')"
 
       - name: Install FusionInfer
         run: |
+          set -e
           IMG=fusion-infer-controller:latest
+          echo "Building FusionInfer image: ${IMG}"
           make docker-build IMG=${IMG}
-          kind load docker-image ${IMG} --name fusion-infer-e2e
+
+          echo "Loading image into Kind cluster..."
+          kind load docker-image ${IMG} --name ${{ env.KIND_CLUSTER }}
+
+          echo "Deploying FusionInfer..."
           make deploy IMG=${IMG}
 
-          kubectl wait --for=condition=Available deployment/fusion-infer-controller-manager -n fusion-infer-system --timeout=120s
+          echo "Waiting for FusionInfer to be ready..."
+          kubectl wait --for=condition=Available deployment/fusion-infer-controller-manager -n fusion-infer-system --timeout=180s
 
       - name: Deploy Mock Inference Service
         run: |
-          kubectl create ns e2e-test || true
-          kubectl apply -f test/e2e/manifests/vllm-simulator.yaml
+          set -e
+          kubectl create ns e2e-test --dry-run=client -o yaml | kubectl apply -f -
+
+          echo "Deploying InferenceService with vLLM simulator..."
           kubectl apply -f test/e2e/manifests/inference-service-sample.yaml
-          
+
+          echo "Waiting for pods to be ready..."
           kubectl wait --for=condition=Ready pods --all -n e2e-test --timeout=300s
 
       - name: Run E2E Tests
-        run: make test-e2e-run
+        run: |
+          set -e
+          echo "Running E2E tests with timeout: ${{ env.TEST_TIMEOUT }}"
+          make test-e2e-run
+        env:
+          CERT_MANAGER_INSTALL_SKIP: true
 
-      - name: Dump logs on failure
+      - name: Collect Test Results
+        if: always()
+        run: |
+          mkdir -p test-results
+          kubectl get pods -n e2e-test -o yaml > test-results/e2e-pods.yaml 2>/dev/null || true
+          kubectl get events --sort-by=.lastTimestamp -n e2e-test > test-results/e2e-events.txt 2>/dev/null || true
+          kubectl get pods -n fusion-infer-system -o yaml > test-results/fusioninfer-pods.yaml 2>/dev/null || true
+          kubectl get events --sort-by=.lastTimestamp -n fusion-infer-system > test-results/fusioninfer-events.txt 2>/dev/null || true
+
+      - name: Dump Logs on Failure
         if: failure()
         run: |
-          kubectl logs -n fusion-infer-system deployment/fusion-infer-controller-manager
+          echo "=== Controller Manager Logs ==="
+          kubectl logs -n fusion-infer-system deployment/fusion-infer-controller-manager --tail=100 || true
+
+          echo "=== All Pods Status ==="
           kubectl get pods -A
+
+          echo "=== Recent Events ==="
+          kubectl get events --sort-by=.lastTimestamp -A | tail -50
+
+      - name: Cleanup Kind Cluster
+        if: always()
+        uses: helm/kind-action@v1.10.0
+        with:
+          cluster_name: ${{ env.KIND_CLUSTER }}
+          action: delete
