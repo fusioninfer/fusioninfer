@@ -88,7 +88,7 @@ const config: Config = {
       minHeadingLevel: 2,
       maxHeadingLevel: 5,
     },
-    image: 'img/fusioninfer-lockup.png',
+    image: 'img/fusioninfer-dragon-transparent.png',
     navbar: {
       title: 'FusionInfer',
       logo: {

@@ -573,6 +573,9 @@ summary,
 
 .avatar__photo {
   border: 1px solid var(--fi-border);
+  background: #ffffff;
+  object-fit: contain;
+  padding: 2px;
 }
 
 .footer {
