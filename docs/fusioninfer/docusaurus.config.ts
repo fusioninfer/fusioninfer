@@ -4,8 +4,8 @@ import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
   title: 'FusionInfer',
-  tagline: 'A Kubernetes-native platform for orchestrating distributed LLM inference at scale',
-  favicon: 'img/fusioninfer-logo.jpeg',
+  tagline: 'A Kubernetes-native platform for distributed LLM inference orchestration',
+  favicon: 'img/fusioninfer-logo.png',
 
   future: {
     v4: true,
@@ -44,7 +44,13 @@ const config: Config = {
           sidebarPath: './sidebars.ts',
           editUrl: 'https://github.com/fusioninfer/fusioninfer/tree/main/docs/fusioninfer/',
         },
-        blog: false,
+        blog: {
+          routeBasePath: 'blog',
+          showReadingTime: true,
+          blogSidebarTitle: 'All posts',
+          blogSidebarCount: 'ALL',
+          editUrl: 'https://github.com/fusioninfer/fusioninfer/tree/main/docs/fusioninfer/',
+        },
         theme: {
           customCss: './src/css/custom.css',
         },
@@ -52,31 +58,53 @@ const config: Config = {
     ],
   ],
 
-  themes: ['@docusaurus/theme-mermaid'],
+  themes: [
+    '@docusaurus/theme-mermaid',
+    [
+      '@easyops-cn/docusaurus-search-local',
+      {
+        hashed: 'filename',
+        language: ['en'],
+        indexDocs: true,
+        indexBlog: true,
+        indexPages: false,
+        docsRouteBasePath: '/docs',
+        blogRouteBasePath: '/blog',
+        highlightSearchTermsOnTargetPage: true,
+        explicitSearchResultPath: true,
+        searchResultLimits: 8,
+        searchResultContextMaxLength: 50,
+      },
+    ],
+  ],
 
   themeConfig: {
+    colorMode: {
+      defaultMode: 'light',
+      disableSwitch: false,
+      respectPrefersColorScheme: false,
+    },
     tableOfContents: {
       minHeadingLevel: 2,
       maxHeadingLevel: 5,
     },
-    image: 'img/fusioninfer-logo.jpeg',
+    image: 'img/fusioninfer-logo.png',
     navbar: {
       title: 'FusionInfer',
       logo: {
-        alt: 'FusionInfer Logo',
-        src: 'img/fusioninfer-logo.jpeg',
-        style: { borderRadius: '8px' },
+        alt: '',
+        src: 'img/fusioninfer-logo.png',
       },
       items: [
         {
           type: 'docSidebar',
           sidebarId: 'tutorialSidebar',
-          position: 'left',
+          position: 'right',
           label: 'Docs',
         },
         {
-          href: 'https://github.com/fusioninfer/fusioninfer',
-          label: 'GitHub',
+          to: '/blog',
+          label: 'Blogs',
           position: 'right',
         },
       ],
@@ -88,12 +116,29 @@ const config: Config = {
           title: 'Docs',
           items: [
             {
-              label: 'Introduction',
+              label: 'Overview',
               to: '/docs/intro',
             },
             {
-              label: 'Design',
+              label: 'Deployment',
+              to: '/docs/user-guide/deployment',
+            },
+            {
+              label: 'Architecture',
               to: '/docs/design/core-design',
+            },
+          ],
+        },
+        {
+          title: 'Resources',
+          items: [
+            {
+              label: 'Blogs',
+              to: '/blog',
+            },
+            {
+              label: 'Developer Guide',
+              to: '/docs/developer-guide/clientset-generation',
             },
           ],
         },
@@ -101,7 +146,11 @@ const config: Config = {
           title: 'Community',
           items: [
             {
-              label: 'GitHub Issues',
+              label: 'GitHub',
+              href: 'https://github.com/fusioninfer/fusioninfer',
+            },
+            {
+              label: 'Issues',
               href: 'https://github.com/fusioninfer/fusioninfer/issues',
             },
             {
@@ -110,25 +159,15 @@ const config: Config = {
             },
           ],
         },
-        {
-          title: 'More',
-          items: [
-            {
-              label: 'GitHub',
-              href: 'https://github.com/fusioninfer/fusioninfer',
-            },
-          ],
-        },
       ],
       copyright: `Copyright © ${new Date().getFullYear()} FusionInfer. Built with Docusaurus.`,
     },
     prism: {
       theme: prismThemes.github,
-      darkTheme: prismThemes.dracula,
+      darkTheme: prismThemes.oceanicNext,
       additionalLanguages: ['bash', 'yaml', 'go'],
     },
   } satisfies Preset.ThemeConfig,
 };
 
 export default config;
-
