@@ -22,10 +22,6 @@
 - Manual: Describe the scenario that was verified.
 -->
 
-## Screenshots or demo
-
-<!-- Add screenshots or a demo for visual or behavioral changes. Remove this section when it is not applicable. -->
-
 ## Notes
 
 <!-- Call out risks, limitations, follow-up work, or intentionally excluded changes. Remove this section when it is not applicable. -->
