@@ -349,7 +349,7 @@ function GitHubStarButton() {
 }
 
 function HeroVisual() {
-  const dragonMark = useBaseUrl('/img/fusioninfer-dragon-transparent.png');
+  const brandMark = useBaseUrl('/img/fusioninfer-logo.png');
 
   return (
     <div className={styles.heroVisual} aria-label="FusionInfer architecture overview">
@@ -386,7 +386,7 @@ function HeroVisual() {
       </div>
 
       <div className={styles.dragonCore}>
-        <img src={dragonMark} alt="" />
+        <img src={brandMark} alt="" />
         <div className={styles.coreLabel}>
           <strong>InferenceService</strong>
           <span>fusioninfer.io/v1alpha1</span>
