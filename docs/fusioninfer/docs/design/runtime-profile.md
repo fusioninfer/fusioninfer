@@ -25,7 +25,7 @@ spec:
       spec:
         containers:
           - name: engine
-            image: vllm/vllm-openai:v0.26.0
+            image: vllm/vllm-openai:v0.27.1
             args:
               - $(FUSION_MODEL_PATH)
             ports:
@@ -179,7 +179,7 @@ Runtime commands should read the Model through `$(FUSION_MODEL_PATH)` rather tha
 
 When LoRA bindings are declared, the Operator also mounts the current Deployment's adapter projection read-only at `/adapters` and generates `/var/run/fusioninfer/lora/adapters.json`. The Manifest uses an internal binding key to map `servedName`, the resolved Model UID, the digest, and the in-container path; paths do not directly use the user-provided served name. The engine container can see only the LoRAs bound to the current Deployment and cannot browse the node cache root.
 
-Inference images in production must be pinned by OCI digest. For readability, the following examples use the official versioned image `vllm/vllm-openai:v0.26.0`; replace it with the corresponding digest-pinned image when deploying.
+Inference images in production must be pinned by OCI digest. For readability, the following examples use the official versioned image `vllm/vllm-openai:v0.27.1`; replace it with the corresponding digest-pinned image when deploying.
 
 ### Scope and References {#scope-and-references}
 
@@ -236,7 +236,7 @@ spec:
       spec:
         containers:
           - name: engine
-            image: vllm/vllm-openai:v0.26.0
+            image: vllm/vllm-openai:v0.27.1
             args:
               - $(FUSION_MODEL_PATH)
             ports:
@@ -272,7 +272,7 @@ spec:
       spec:
         containers:
           - name: engine
-            image: vllm/vllm-openai:v0.26.0
+            image: vllm/vllm-openai:v0.27.1
             args:
               - $(FUSION_MODEL_PATH)
               - --kv-transfer-config
@@ -290,7 +290,7 @@ spec:
       spec:
         containers:
           - name: engine
-            image: vllm/vllm-openai:v0.26.0
+            image: vllm/vllm-openai:v0.27.1
             args:
               - $(FUSION_MODEL_PATH)
               - --kv-transfer-config
@@ -324,7 +324,7 @@ spec:
       spec:
         containers:
           - name: engine
-            image: vllm/vllm-openai:v0.26.0
+            image: vllm/vllm-openai:v0.27.1
             args:
               - $(FUSION_MODEL_PATH)
               - --port
@@ -367,7 +367,7 @@ spec:
       spec:
         containers:
           - name: engine
-            image: vllm/vllm-openai:v0.26.0
+            image: vllm/vllm-openai:v0.27.1
             args:
               - $(FUSION_MODEL_PATH)
               - --enable-lora

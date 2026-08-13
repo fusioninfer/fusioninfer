@@ -25,7 +25,7 @@ spec:
       spec:
         containers:
           - name: engine
-            image: vllm/vllm-openai:v0.26.0
+            image: vllm/vllm-openai:v0.27.1
             args:
               - $(FUSION_MODEL_PATH)
             ports:
@@ -179,7 +179,7 @@ Runtime 命令应通过 `$(FUSION_MODEL_PATH)` 读取模型，不应写死缓存
 
 声明 LoRA 绑定时，Operator 还把当前 Deployment 的 adapter projection 只读挂载到 `/adapters`，并生成 `/var/run/fusioninfer/lora/adapters.json`。Manifest 使用内部 binding key 映射 `servedName`、resolved Model UID、digest 和容器内路径；路径不直接使用用户提供的 served name。引擎容器只能看到当前 Deployment 已绑定的 LoRA，不能浏览节点缓存根目录。
 
-生产环境中的推理镜像必须使用 OCI digest 固定。以下示例使用官方版本化镜像 `vllm/vllm-openai:v0.26.0` 以保持可读性，部署时需要替换为对应版本的 digest-pinned 镜像。
+生产环境中的推理镜像必须使用 OCI digest 固定。以下示例使用官方版本化镜像 `vllm/vllm-openai:v0.27.1` 以保持可读性，部署时需要替换为对应版本的 digest-pinned 镜像。
 
 ### 作用域与引用 {#scope-and-references}
 
@@ -236,7 +236,7 @@ spec:
       spec:
         containers:
           - name: engine
-            image: vllm/vllm-openai:v0.26.0
+            image: vllm/vllm-openai:v0.27.1
             args:
               - $(FUSION_MODEL_PATH)
             ports:
@@ -272,7 +272,7 @@ spec:
       spec:
         containers:
           - name: engine
-            image: vllm/vllm-openai:v0.26.0
+            image: vllm/vllm-openai:v0.27.1
             args:
               - $(FUSION_MODEL_PATH)
               - --kv-transfer-config
@@ -290,7 +290,7 @@ spec:
       spec:
         containers:
           - name: engine
-            image: vllm/vllm-openai:v0.26.0
+            image: vllm/vllm-openai:v0.27.1
             args:
               - $(FUSION_MODEL_PATH)
               - --kv-transfer-config
@@ -324,7 +324,7 @@ spec:
       spec:
         containers:
           - name: engine
-            image: vllm/vllm-openai:v0.26.0
+            image: vllm/vllm-openai:v0.27.1
             args:
               - $(FUSION_MODEL_PATH)
               - --port
@@ -367,7 +367,7 @@ spec:
       spec:
         containers:
           - name: engine
-            image: vllm/vllm-openai:v0.26.0
+            image: vllm/vllm-openai:v0.27.1
             args:
               - $(FUSION_MODEL_PATH)
               - --enable-lora

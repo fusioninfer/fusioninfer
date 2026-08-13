@@ -102,7 +102,7 @@ spec:
       spec:
         containers:
           - name: engine
-            image: vllm/vllm-openai:v0.26.0
+            image: vllm/vllm-openai:v0.27.1
             args:
               - $(FUSION_MODEL_PATH) # The Controller injects the model path from the node cache
             ports:

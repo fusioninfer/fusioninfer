@@ -192,7 +192,7 @@ spec:
         spec:
           containers:
             - name: vllm
-              image: vllm/vllm-openai:v0.26.0
+              image: vllm/vllm-openai:v0.27.1
               args: ["--model", "Qwen/Qwen3-8B"]`,
   },
   {
@@ -226,7 +226,7 @@ spec:
         spec:
           containers:
             - name: vllm-prefill
-              image: vllm/vllm-openai:v0.26.0
+              image: vllm/vllm-openai:v0.27.1
               args:
                 - "--model"
                 - "Qwen/Qwen3-8B"
@@ -239,7 +239,7 @@ spec:
         spec:
           containers:
             - name: vllm-decode
-              image: vllm/vllm-openai:v0.26.0
+              image: vllm/vllm-openai:v0.27.1
               args:
                 - "--model"
                 - "Qwen/Qwen3-8B"
@@ -283,7 +283,7 @@ spec:
         spec:
           containers:
             - name: vllm
-              image: vllm/vllm-openai:v0.26.0
+              image: vllm/vllm-openai:v0.27.1
               args: ["--model", "Qwen/Qwen3-8B"]`,
   },
 ];

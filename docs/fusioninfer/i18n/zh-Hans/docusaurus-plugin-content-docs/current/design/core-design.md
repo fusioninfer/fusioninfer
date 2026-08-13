@@ -53,7 +53,7 @@ spec:
         spec:
           containers:
             - name: vllm
-              image: vllm/vllm-openai:v0.26.0
+              image: vllm/vllm-openai:v0.27.1
               args:
                 - "--model"
                 - "Qwen/Qwen3-8B"
@@ -83,7 +83,7 @@ spec:
         spec:
           containers:
             - name: vllm
-              image: vllm/vllm-openai:v0.26.0
+              image: vllm/vllm-openai:v0.27.1
               args:
                 - "--model"
                 - "Qwen/Qwen3-8B"
@@ -102,7 +102,7 @@ spec:
         spec:
           containers:
             - name: vllm
-              image: vllm/vllm-openai:v0.26.0
+              image: vllm/vllm-openai:v0.27.1
               args:
                 - "--model"
                 - "Qwen/Qwen3-8B"
@@ -136,7 +136,7 @@ spec:
         spec:
           containers:
             - name: vllm
-              image: vllm/vllm-openai:v0.26.0
+              image: vllm/vllm-openai:v0.27.1
               args:
                 - "--model"
                 - "deepseek-ai/DeepSeek-R1"
@@ -170,7 +170,7 @@ spec:
         spec:
           containers:
             - name: vllm
-              image: vllm/vllm-openai:v0.26.0
+              image: vllm/vllm-openai:v0.27.1
               args:
                 - "--model"
                 - "deepseek-ai/DeepSeek-R1"
@@ -193,7 +193,7 @@ spec:
         spec:
           containers:
             - name: vllm
-              image: vllm/vllm-openai:v0.26.0
+              image: vllm/vllm-openai:v0.27.1
               args:
                 - "--model"
                 - "deepseek-ai/DeepSeek-R1"
@@ -472,7 +472,7 @@ spec:
       spec:
         containers:
           - name: vllm
-            image: vllm/vllm-openai:v0.26.0
+            image: vllm/vllm-openai:v0.27.1
             args: ["Qwen/Qwen3-8B"]
             ports:
               - containerPort: 8000
@@ -540,7 +540,7 @@ spec:
         schedulerName: volcano
         containers:
           - name: vllm
-            image: vllm/vllm-openai:v0.26.0
+            image: vllm/vllm-openai:v0.27.1
             command: ["/bin/sh", "-c"]
             args:
               - "ray start --head --port=6379 && vllm serve deepseek-ai/DeepSeek-R1 --tensor-parallel-size 32 --distributed-executor-backend ray"
@@ -562,7 +562,7 @@ spec:
         schedulerName: volcano
         containers:
           - name: vllm
-            image: vllm/vllm-openai:v0.26.0
+            image: vllm/vllm-openai:v0.27.1
             command: ["/bin/sh", "-c"]
             args:
               - "ray start --address=$LWS_LEADER_ADDRESS:6379 --block"
@@ -668,7 +668,7 @@ spec:
         schedulerName: volcano
         containers:
           - name: vllm
-            image: vllm/vllm-openai:v0.26.0
+            image: vllm/vllm-openai:v0.27.1
             # ... Prefill 配置
 ---
 # 副本 0 的 Decode LWS
@@ -696,7 +696,7 @@ spec:
         schedulerName: volcano
         containers:
           - name: vllm
-            image: vllm/vllm-openai:v0.26.0
+            image: vllm/vllm-openai:v0.27.1
             # ... Decode 配置
 ```
 

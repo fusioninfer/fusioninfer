@@ -61,7 +61,7 @@ spec:
         spec:
           containers:
             - name: vllm
-              image: vllm/vllm-openai:v0.26.0
+              image: vllm/vllm-openai:v0.27.1
               args:
                 - --model=Qwen/Qwen2.5-7B-Instruct
 ```
@@ -95,7 +95,7 @@ spec:
         spec:
           containers:
             - name: vllm
-              image: vllm/vllm-openai:v0.26.0
+              image: vllm/vllm-openai:v0.27.1
               args:
                 - --model=/models/llama-70b
 ```
@@ -130,7 +130,7 @@ spec:
         spec:
           containers:
             - name: prefill
-              image: vllm/vllm-openai:v0.26.0
+              image: vllm/vllm-openai:v0.27.1
               args:
                 - --model=meta-llama/Llama-3-70B-Instruct
                 - --kv-transfer-config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
@@ -141,7 +141,7 @@ spec:
         spec:
           containers:
             - name: decode
-              image: vllm/vllm-openai:v0.26.0
+              image: vllm/vllm-openai:v0.27.1
               args:
                 - --model=meta-llama/Llama-3-70B-Instruct
                 - --kv-transfer-config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
@@ -235,7 +235,7 @@ spec:
         spec:
           containers:
           - name: vllm
-            image: vllm/vllm-openai:v0.26.0
+            image: vllm/vllm-openai:v0.27.1
             args:
             - --model=meta-llama/Llama-3-8B-Instruct
 ```
@@ -431,7 +431,7 @@ spec:
         spec:
           containers:
           - name: vllm
-            image: vllm/vllm-openai:v0.26.0
+            image: vllm/vllm-openai:v0.27.1
             args:
             - --model=meta-llama/Llama-3-8B-Instruct
 ```
@@ -464,7 +464,7 @@ spec:
         spec:
           containers:
             - name: prefill
-              image: vllm/vllm-openai:v0.26.0
+              image: vllm/vllm-openai:v0.27.1
               args:
                 - --model=meta-llama/Llama-3-70B-Instruct
                 - --kv-transfer-config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
@@ -475,7 +475,7 @@ spec:
         spec:
           containers:
             - name: decode
-              image: vllm/vllm-openai:v0.26.0
+              image: vllm/vllm-openai:v0.27.1
               args:
                 - --model=meta-llama/Llama-3-70B-Instruct
                 - --kv-transfer-config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'

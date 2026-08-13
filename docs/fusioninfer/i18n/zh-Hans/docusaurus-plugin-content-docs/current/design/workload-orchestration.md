@@ -38,7 +38,7 @@ spec:
       spec:
         containers:
           - name: engine
-            image: vllm/vllm-openai:v0.26.0
+            image: vllm/vllm-openai:v0.27.1
             args:
               - $(FUSION_MODEL_PATH)
               - --tensor-parallel-size
@@ -124,7 +124,7 @@ spec:
       spec:
         containers:
           - name: engine
-            image: vllm/vllm-openai:v0.26.0
+            image: vllm/vllm-openai:v0.27.1
             args:
               - $(FUSION_MODEL_PATH)
               - --port
@@ -251,7 +251,7 @@ spec:
         schedulerName: volcano
         containers:
           - name: engine
-            image: vllm/vllm-openai:v0.26.0
+            image: vllm/vllm-openai:v0.27.1
             command:
               - vllm
               - serve
@@ -284,7 +284,7 @@ spec:
         schedulerName: volcano
         containers:
           - name: engine
-            image: vllm/vllm-openai:v0.26.0
+            image: vllm/vllm-openai:v0.27.1
             command:
               - vllm
               - serve
@@ -343,7 +343,7 @@ spec:
       spec:
         containers:
           - name: engine
-            image: vllm/vllm-openai:v0.26.0
+            image: vllm/vllm-openai:v0.27.1
             args:
               - $(FUSION_MODEL_PATH)
               - --port
@@ -369,7 +369,7 @@ spec:
       spec:
         containers:
           - name: engine
-            image: vllm/vllm-openai:v0.26.0
+            image: vllm/vllm-openai:v0.27.1
             args:
               - $(FUSION_MODEL_PATH)
               - --port
@@ -502,13 +502,13 @@ spec:
               schedulerName: volcano
               containers:
                 - name: engine
-                  image: vllm/vllm-openai:v0.26.0
+                  image: vllm/vllm-openai:v0.27.1
           workerTemplate:
             spec:
               schedulerName: volcano
               containers:
                 - name: engine
-                  image: vllm/vllm-openai:v0.26.0
+                  image: vllm/vllm-openai:v0.27.1
 
     - name: decoder
       spec:
@@ -521,13 +521,13 @@ spec:
               schedulerName: volcano
               containers:
                 - name: engine
-                  image: vllm/vllm-openai:v0.26.0
+                  image: vllm/vllm-openai:v0.27.1
           workerTemplate:
             spec:
               schedulerName: volcano
               containers:
                 - name: engine
-                  image: vllm/vllm-openai:v0.26.0
+                  image: vllm/vllm-openai:v0.27.1
 ```
 
 DisaggregatedSet Controller 为每个 role 生成一个 child LWS，并管理两个角色的协调 rollout 与 Headless Service。
