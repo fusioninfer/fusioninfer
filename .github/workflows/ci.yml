@@ -53,7 +53,7 @@ jobs:
       - name: Run go vet
         run: go vet ./...
 
-      - name: Generate code
+      - name: Generate API and client code
         run: make generate
 
       - name: Generate manifests

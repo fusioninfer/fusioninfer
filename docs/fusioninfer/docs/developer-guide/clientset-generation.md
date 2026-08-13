@@ -31,7 +31,7 @@ type YourResource struct {
 2. Regenerate:
 
 ```bash
-./hack/update-codegen.sh
+make generate
 ```
 
 Generated code will be placed in `client-go/`.

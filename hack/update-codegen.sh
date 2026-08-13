@@ -21,22 +21,18 @@ set -o pipefail
 cd "$(dirname "${0}")/.."
 REPO_ROOT="$(pwd)"
 
-# Get code-generator from go module cache
-CODEGEN_VERSION=$(go list -m -f '{{.Version}}' k8s.io/code-generator)
-CODEGEN_PKG=$(go env GOMODCACHE)/k8s.io/code-generator@${CODEGEN_VERSION}
+CODEGEN_VERSION="${1:?code-generator version is required}"
+CODEGEN_PKG="$(go env GOMODCACHE)/k8s.io/code-generator@${CODEGEN_VERSION}"
 
+export KUBE_CODEGEN_TAG="${CODEGEN_VERSION}"
 source "${CODEGEN_PKG}/kube_codegen.sh"
 
-# Workaround for code-generator directory resolution
-mkdir -p github.com && ln -s ../.. github.com/fusioninfer
-trap "rm -rf github.com" EXIT
-
 # Generate deepcopy, defaulter, conversion functions
-kube::codegen::gen_helpers github.com/fusioninfer/fusioninfer/api \
+kube::codegen::gen_helpers "${REPO_ROOT}/api" \
     --boilerplate "${REPO_ROOT}/hack/boilerplate.go.txt"
 
 # Generate client, listers, informers and apply configurations
-kube::codegen::gen_client github.com/fusioninfer/fusioninfer/api \
+kube::codegen::gen_client "${REPO_ROOT}/api" \
     --with-watch \
     --with-applyconfig \
     --output-dir "${REPO_ROOT}/client-go" \

@@ -31,7 +31,7 @@ type YourResource struct {
 2. 重新生成代码：
 
 ```bash
-./hack/update-codegen.sh
+make generate
 ```
 
 生成的代码将存放在 `client-go/` 中。
