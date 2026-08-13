@@ -2,7 +2,7 @@
 slug: introducing-fusioninfer
 title: "Introducing FusionInfer: A Kubernetes-native Platform for LLM Inference"
 authors: [fusioninfer-team]
-tags: [Kubernetes, LLM inference, platform engineering]
+tags: [kubernetes, llm-inference, platform-engineering]
 description: Meet FusionInfer, a Kubernetes-native platform for declarative LLM inference orchestration.
 ---
 
@@ -12,7 +12,7 @@ FusionInfer brings those responsibilities behind one Kubernetes API.
 
 <!-- truncate -->
 
-## One declarative API
+## One declarative API {#one-declarative-api}
 
 FusionInfer provides an `InferenceService` custom resource for describing an inference topology. A service can combine workload roles, replica counts, multi-node settings, pod templates, and routing configuration in one manifest.
 
@@ -24,7 +24,7 @@ The controller turns that declaration into the Kubernetes resources needed by th
 
 This keeps the user-facing workflow Kubernetes-native while leaving the inference engine inside the workload container.
 
-## Three serving topologies
+## Three serving topologies {#three-serving-topologies}
 
 FusionInfer is designed around three LLM serving patterns:
 
@@ -34,7 +34,7 @@ FusionInfer is designed around three LLM serving patterns:
 
 Each topology uses the same `InferenceService` API, so teams do not need a separate orchestration model for every serving pattern.
 
-## A familiar Kubernetes workflow
+## A familiar Kubernetes workflow {#a-familiar-kubernetes-workflow}
 
 The following shortened example declares a routed, single-node service:
 
@@ -58,7 +58,7 @@ spec:
         spec:
           containers:
             - name: vllm
-              image: vllm/vllm-openai:v0.11.0
+              image: vllm/vllm-openai:v0.26.0
               args: ["--model", "Qwen/Qwen3-8B"]
               resources:
                 limits:
@@ -67,7 +67,7 @@ spec:
 
 Users submit the manifest with standard Kubernetes tooling. FusionInfer then reconciles the workload and routing resources represented by the service.
 
-## Inference-aware routing
+## Inference-aware routing {#inference-aware-routing}
 
 Generic load balancing does not account for signals such as prefix reuse, KV-cache pressure, queue depth, or the split between prefill and decode. FusionInfer's `InferenceService` API exposes routing strategies for:
 
@@ -79,10 +79,10 @@ Generic load balancing does not account for signals such as prefix reuse, KV-cac
 
 Advanced users can also provide an `EndpointPickerConfig` when a predefined strategy is not enough.
 
-## A platform, not an inference engine
+## A platform, not an inference engine {#a-platform-not-an-inference-engine}
 
 FusionInfer does not implement model execution. Engines such as vLLM continue to run in the workload containers. FusionInfer focuses on the Kubernetes control plane around those engines, and its current scope is LLM inference rather than general-purpose machine learning workloads.
 
-## Start exploring
+## Start exploring {#start-exploring}
 
 Read the [documentation](/docs/intro) for the architecture and prerequisites, then follow the [deployment guide](/docs/user-guide/deployment) for single-node and multi-node examples.

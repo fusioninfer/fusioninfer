@@ -1,0 +1,7 @@
+fusioninfer-team:
+  name: FusionInfer Team
+  title: FusionInfer 维护者
+  url: https://github.com/fusioninfer
+  image_url: /img/fusioninfer-logo.png
+  socials:
+    github: fusioninfer

@@ -1,0 +1,14 @@
+kubernetes:
+  label: Kubernetes
+  permalink: /kubernetes
+  description: Content about Kubernetes-native orchestration and infrastructure.
+
+llm-inference:
+  label: LLM inference
+  permalink: /llm-inference
+  description: Content about large language model inference and serving.
+
+platform-engineering:
+  label: Platform engineering
+  permalink: /platform-engineering
+  description: Content about building and operating inference platforms.

@@ -1,0 +1,54 @@
+diff --git a/node_modules/@easyops-cn/docusaurus-search-local/dist/client/client/theme/SearchBar/SearchBar.jsx b/node_modules/@easyops-cn/docusaurus-search-local/dist/client/client/theme/SearchBar/SearchBar.jsx
+index 14f5473..e67b9dd 100644
+--- a/node_modules/@easyops-cn/docusaurus-search-local/dist/client/client/theme/SearchBar/SearchBar.jsx
++++ b/node_modules/@easyops-cn/docusaurus-search-local/dist/client/client/theme/SearchBar/SearchBar.jsx
+@@ -51,6 +51,11 @@ const SEARCH_PARAM_HIGHLIGHT = "_highlight";
+ export default function SearchBar({ handleSearchBarToggle, }) {
+     const isBrowser = useIsBrowser();
+     const { siteConfig: { baseUrl }, i18n: { currentLocale }, } = useDocusaurusContext();
++    const searchLabel = translate({
++        id: "theme.SearchBar.label",
++        message: "Search",
++        description: "The ARIA label and placeholder for search button",
++    });
+     // It returns undefined for non-docs pages
+     const activePlugin = useActivePlugin();
+     let versionUrl = baseUrl;
+@@ -391,11 +396,7 @@ export default function SearchBar({ handleSearchBarToggle, }) {
+         })} hidden={hidden} 
+     // Manually make the search bar be LTR even if in RTL
+     dir="ltr">
+-      <input placeholder={translate({
+-            id: "theme.SearchBar.label",
+-            message: "Search",
+-            description: "The ARIA label and placeholder for search button",
+-        })} aria-label="Search" className={`navbar__search-input ${styles.searchInput}`} onMouseEnter={onInputMouseEnter} onFocus={onInputFocus} onBlur={onInputBlur} onChange={onInputChange} ref={searchBarRef} value={inputValue}/>
++      <input placeholder={searchLabel} aria-label={searchLabel} className={`navbar__search-input ${styles.searchInput}`} onMouseEnter={onInputMouseEnter} onFocus={onInputFocus} onBlur={onInputBlur} onChange={onInputChange} ref={searchBarRef} value={inputValue}/>
+       {askAi && AskAIWidgetComponent && (<AskAIWidgetComponent ref={askAIWidgetRef} {...askAi}>
+           <span hidden></span>
+         </AskAIWidgetComponent>)}
+diff --git a/node_modules/@easyops-cn/docusaurus-search-local/dist/client/client/theme/SearchPage/SearchPage.jsx b/node_modules/@easyops-cn/docusaurus-search-local/dist/client/client/theme/SearchPage/SearchPage.jsx
+index 2efb8b4..6183050 100644
+--- a/node_modules/@easyops-cn/docusaurus-search-local/dist/client/client/theme/SearchPage/SearchPage.jsx
++++ b/node_modules/@easyops-cn/docusaurus-search-local/dist/client/client/theme/SearchPage/SearchPage.jsx
+@@ -26,6 +26,11 @@ function SearchPageContent() {
+     const { siteConfig: { baseUrl }, i18n: { currentLocale }, } = useDocusaurusContext();
+     const { selectMessage } = usePluralForm();
+     const { searchValue, searchContext, searchVersion, updateSearchPath, updateSearchContext, } = useSearchQuery();
++    const searchLabel = translate({
++        id: "theme.SearchBar.label",
++        message: "Search",
++        description: "The ARIA label and placeholder for search button",
++    });
+     const [searchQuery, setSearchQuery] = useState(searchValue);
+     const [searchResults, setSearchResults] = useState();
+     const versionUrl = `${baseUrl}${searchVersion}`;
+@@ -95,7 +100,7 @@ function SearchPageContent() {
+             "col--9": Array.isArray(searchContextByPaths),
+             "col--12": !Array.isArray(searchContextByPaths),
+         })}>
+-            <input type="search" name="q" className={styles.searchQueryInput} aria-label="Search" onChange={handleSearchInputChange} value={searchQuery} autoComplete="off" autoFocus/>
++            <input type="search" name="q" className={styles.searchQueryInput} aria-label={searchLabel} onChange={handleSearchInputChange} value={searchQuery} autoComplete="off" autoFocus/>
+           </div>
+           {Array.isArray(searchContextByPaths) ? (<div className={clsx("col", "col--3", "padding-left--none", styles.searchContextColumn)}>
+               <select name="search-context" className={styles.searchContextInput} id="context-selector" value={searchContext} onChange={(e) => updateSearchContext(e.target.value)}>

@@ -3,41 +3,41 @@ sidebar_position: 1
 title: InferenceService CRD
 ---
 
-:::warning Legacy API design
-This page documents the existing `InferenceService` v1alpha1 API and Controller behavior. It remains relevant during migration, but the target user API is described by [Architecture](./model-serving.md). The current multi-node, LeaderWorkerSet, and Volcano design is documented separately in [Workload Orchestration](./workload-orchestration.md); the sections below retain the legacy `InferenceService.roles` terminology.
-:::
+:::warning 旧版 API 设计
+本文档说明现有 `InferenceService` v1alpha1 API 和 Controller 行为。迁移期间本文档仍有参考价值，但目标用户 API 见[架构](./model-serving.md)。当前的多节点、LeaderWorkerSet 和 Volcano 设计另见[工作负载编排](./workload-orchestration.md)；以下章节保留旧版 `InferenceService.roles` 术语。
+::::
 
 # InferenceService CRD {#inferenceservice-crd}
 
-## Summary {#summary}
+## 概述 {#summary}
 
-This proposal introduces a `InferenceService` CRD to support both **monolithic** and **prefill/decode (PD) disaggregated** serving topologies for large language models (LLMs). The design enables users to declaratively define:
+本方案引入一个 `InferenceService` CRD，以同时支持大型语言模型（LLM）的**单体**和 **Prefill/Decode（PD）分离**服务拓扑。该设计让用户能够以声明方式定义：
 
-- Role-specific deployments (`router`, `prefiller`, `decoder`, `worker`)
-- Scheduling policies through a pluggable request scheduling framework
-- Multi-node replication and resource constraints per role
+- 按角色划分的部署（`router`、`prefiller`、`decoder`、`worker`）
+- 通过可插拔请求调度框架配置的调度策略
+- 每个角色的多节点副本和资源约束
 
-## Motivation {#motivation}
+## 动机 {#motivation}
 
-Modern LLM serving systems increasingly adopt **disaggregation** (separating prefill and decode role) to improve GPU utilization, reduce latency tail, and enable independent scaling. However, many use cases still benefit from **monolithic deployment** (single pod handling full request lifecycle) due to simplicity or low traffic.
+现代 LLM 服务系统越来越多地采用**分离**架构（将 Prefill 和 Decode 角色分开），以提高 GPU 利用率、降低尾延迟并支持独立扩缩容。但是，许多使用场景仍受益于**单体部署**（由单个 Pod 处理完整请求生命周期），因为它更简单或适合低流量。
 
-### Goals {#goals}
+### 目标 {#goals}
 
-- Define a single CRD that supports both monolithic and disaggregated inference topologies.
-- Allow per component specification of replicas, node count, container templates, and resources.
-- Integrate with an **EPP scheduling framework** for request scheduling at the gateway.
-- Enable multi-node deployment for prefill/decode components to scale across GPUs/nodes.
+- 定义一个同时支持单体和分离推理拓扑的 CRD。
+- 允许为每个组件指定副本数、节点数、容器模板和资源。
+- 与用于 Gateway 请求调度的 **EPP 调度框架**集成。
+- 支持 Prefill/Decode 组件的多节点部署，以跨 GPU/节点扩展。
 
-### Non-Goals {#non-goals}
+### 非目标 {#non-goals}
 
-- Implement the underlying inference engine (e.g., vLLM, TensorRT-LLM) — only orchestrate it.
-- Support non-LLM workloads.
+- 实现底层推理引擎（例如 vLLM、TensorRT-LLM）——本方案只负责编排。
+- 支持非 LLM 工作负载。
 
-## User Stories {#user-stories}
+## 用户故事 {#user-stories}
 
-### Story 1: Deploy a monolithic LLM service {#story-1-deploy-a-monolithic-llm-service}
+### 故事 1：部署单体 LLM 服务 {#story-1-deploy-a-monolithic-llm-service}
 
-As a developer, I want to deploy Qwen-3 as a single-service endpoint.
+作为开发者，我希望将 Qwen-3 部署为单服务端点。
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -65,9 +65,9 @@ spec:
                   nvidia.com/gpu: "1"
 ```
 
-### Story 2: Deploy a disaggregated prefill/decode service {#story-2-deploy-a-disaggregated-prefilldecode-service}
+### 故事 2：部署 Prefill/Decode 分离服务 {#story-2-deploy-a-disaggregated-prefilldecode-service}
 
-As a developer, I want to deploy a prefill/decode disaggregated inference service for Qwen-3.
+作为开发者，我希望为 Qwen-3 部署 Prefill/Decode 分离推理服务。
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -116,9 +116,9 @@ spec:
                   nvidia.com/gpu: "1"
 ```
 
-### Story 3: Deploy a multi-node inference service for large models {#story-3-deploy-a-multi-node-inference-service-for-large-models}
+### 故事 3：为大模型部署多节点推理服务 {#story-3-deploy-a-multi-node-inference-service-for-large-models}
 
-As a developer, I want to deploy DeepSeek-R1 (671B) using multi-node tensor parallelism. System deploys 2 replicas × 4 nodes = 8 pods, each with 8 GPUs (total 64 GPUs for tensor parallelism).
+作为开发者，我希望使用多节点张量并行部署 DeepSeek-R1（671B）。系统将部署 2 个副本 × 4 个节点 = 8 个 Pod，每个 Pod 使用 8 张 GPU（张量并行共使用 64 张 GPU）。
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -150,9 +150,9 @@ spec:
                   nvidia.com/gpu: "8"
 ```
 
-### Story 4: Deploy a disaggregated multi-node prefill/decode service {#story-4-deploy-a-disaggregated-multi-node-prefilldecode-service}
+### 故事 4：部署 Prefill/Decode 分离的多节点服务 {#story-4-deploy-a-disaggregated-multi-node-prefilldecode-service}
 
-As a developer, I want to deploy DeepSeek-R1 with prefill/decode disaggregation and multi-node parallelism. System deploys prefill (1 replica × 2 nodes = 2 pods) + decode (2 replicas × 4 nodes = 8 pods), total 10 pods with 80 GPUs.
+作为开发者，我希望使用 Prefill/Decode 分离和多节点并行部署 DeepSeek-R1。系统将部署 Prefill（1 个副本 × 2 个节点 = 2 个 Pod）+ Decode（2 个副本 × 4 个节点 = 8 个 Pod），共 10 个 Pod、80 张 GPU。
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -209,27 +209,27 @@ spec:
                   nvidia.com/gpu: "8"
 ```
 
-## Proposal {#proposal}
+## 方案 {#proposal}
 
-The `InferenceService` CR will serve as the primary user-facing API for LLM deployment. 
-Users declare **roles** (a list of components), each identified by a user-chosen name and classified by its componentType.
+`InferenceService` CR 将作为面向用户的主要 LLM 部署 API。
+用户声明 **roles**（组件列表），每个角色由用户选择的名称标识，并按其 `componentType` 分类。
 
-### Component Types {#component-types}
+### 组件类型 {#component-types}
 
-| componentType | Description |
-|---------------|-------------|
-| `worker` | Monolithic inference (full request lifecycle) |
-| `prefiller` | Handles prompt ingestion and KV cache generation |
-| `decoder` | Performs autoregressive token generation |
-| `router` | Request router with EPP scheduling plugins |
+| componentType | 说明 |
+|---------------|------|
+| `worker` | 单体推理（完整请求生命周期） |
+| `prefiller` | 处理 prompt 摄入和 KV cache 生成 |
+| `decoder` | 执行自回归 token 生成 |
+| `router` | 使用 EPP 调度插件的请求路由器 |
 
-### Reconciliation Logic {#reconciliation-logic}
+### 调和逻辑 {#reconciliation-logic}
 
-The following diagrams illustrate the resource topology for different deployment scenarios.
+以下图示说明不同部署场景的资源拓扑。
 
-#### Monolithic Deployment {#monolithic-deployment}
+#### 单体部署 {#monolithic-deployment}
 
-A simple single-role deployment where each pod handles the full inference lifecycle.
+简单的单角色部署，每个 Pod 处理完整的推理生命周期。
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -239,7 +239,7 @@ A simple single-role deployment where each pod handles the full inference lifecy
                           │
                           ▼
               ┌───────────────────────┐
-              │    Role: inference    │
+              │    角色: inference    │
               │  componentType: worker│
               │     replicas: 1       │
               └───────────┬───────────┘
@@ -250,15 +250,15 @@ A simple single-role deployment where each pod handles the full inference lifecy
                   │  (size=1)     │
                   ├───────────────┤
                   │  ★ Leader-0   │
-                  │    [1 GPU]    │
+                  │   [1 张 GPU]  │
                   └───────────────┘
 
-      Total: 1 replica × 1 node × 1 GPU = 1 GPU
+      总计：1 个副本 × 1 个节点 × 1 张 GPU = 1 张 GPU
 ```
 
-#### Disaggregated PD Deployment {#disaggregated-pd-deployment}
+#### Prefill/Decode 分离部署 {#disaggregated-pd-deployment}
 
-Prefill and decode are separated into independent roles for better resource utilization.
+Prefill 和 Decode 被拆分为独立角色，以提高资源利用率。
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
@@ -267,14 +267,14 @@ Prefill and decode are separated into independent roles for better resource util
 └─────────────────────────────────┬─────────────────────────────────────────┘
                                   │
                   ┌───────────────┴───────────────┐
-                  │         Roles (2)             │
+                  │          角色 (2)             │
                   └───────────────┬───────────────┘
                                   │
          ┌────────────────────────┼────────────────────────┐
          │                                                 │
          ▼                                                 ▼
 ┌─────────────────────┐                       ┌─────────────────────┐
-│   Role: prefill     │                       │   Role: decode      │
+│   角色: prefill     │                       │   角色: decode      │
 │ componentType:      │                       │ componentType:      │
 │   prefiller         │                       │   decoder           │
 │ replicas: 2         │                       │ replicas: 4         │
@@ -287,21 +287,21 @@ Prefill and decode are separated into independent roles for better resource util
   │  replicas: 2  │                           │  replicas: 4  │
   ├───────────────┤                           ├───────────────┤
   │  ★ Leader-0   │                           │  ★ Leader-0   │
-  │    [1 GPU]    │                           │    [1 GPU]    │
+  │   [1 张 GPU]  │                           │   [1 张 GPU]  │
   │  ★ Leader-1   │                           │  ★ Leader-1   │
-  │    [1 GPU]    │                           │    [1 GPU]    │
+  │   [1 张 GPU]  │                           │   [1 张 GPU]  │
   └───────────────┘                           │  ★ Leader-2   │
-                                              │    [1 GPU]    │
+                                              │   [1 张 GPU]  │
                                               │  ★ Leader-3   │
-                                              │    [1 GPU]    │
+                                              │   [1 张 GPU]  │
                                               └───────────────┘
 
-      Total: prefill (2 × 1 GPU) + decode (4 × 1 GPU) = 6 GPUs
+      总计：Prefill（2 × 1 张 GPU）+ Decode（4 × 1 张 GPU）= 6 张 GPU
 ```
 
-#### Multi-Node Deployment {#multi-node-deployment}
+#### 多节点部署 {#multi-node-deployment}
 
-Large model deployment using LeaderWorkerSet (LWS) for multi-node tensor parallelism.
+使用 LeaderWorkerSet（LWS）进行多节点张量并行的大模型部署。
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
@@ -311,7 +311,7 @@ Large model deployment using LeaderWorkerSet (LWS) for multi-node tensor paralle
                                   │
                                   ▼
                       ┌───────────────────────┐
-                      │    Role: inference    │
+                      │    角色: inference    │
                       │  componentType: worker│
                       │     replicas: 2       │
                       │  multinode:           │
@@ -323,26 +323,26 @@ Large model deployment using LeaderWorkerSet (LWS) for multi-node tensor paralle
                 ▼                                   ▼
       ┌─────────────────────┐             ┌─────────────────────┐
       │  LeaderWorkerSet-0  │             │  LeaderWorkerSet-1  │
-      │     (4 Pods)        │             │     (4 Pods)        │
-      │   TP=32 across      │             │   TP=32 across      │
-      │   32 GPUs           │             │   32 GPUs           │
+      │     (4 个 Pod)      │             │     (4 个 Pod)      │
+      │   TP=32，跨         │             │   TP=32，跨         │
+      │   32 张 GPU         │             │   32 张 GPU         │
       ├─────────────────────┤             ├─────────────────────┤
       │ ★ Leader Pod-0      │             │ ★ Leader Pod-0      │
-      │   [8 GPUs]          │             │   [8 GPUs]          │
+      │   [8 张 GPU]        │             │   [8 张 GPU]        │
       │ ● Worker Pod-1      │             │ ● Worker Pod-1      │
-      │   [8 GPUs]          │             │   [8 GPUs]          │
+      │   [8 张 GPU]        │             │   [8 张 GPU]        │
       │ ● Worker Pod-2      │             │ ● Worker Pod-2      │
-      │   [8 GPUs]          │             │   [8 GPUs]          │
+      │   [8 张 GPU]        │             │   [8 张 GPU]        │
       │ ● Worker Pod-3      │             │ ● Worker Pod-3      │
-      │   [8 GPUs]          │             │   [8 GPUs]          │
+      │   [8 张 GPU]        │             │   [8 张 GPU]        │
       └─────────────────────┘             └─────────────────────┘
 
-      Total: inference (2 replicas × 4 nodes × 8 GPUs) = 8 pods, 64 GPUs
+      总计：inference（2 个副本 × 4 个节点 × 8 张 GPU）= 8 个 Pod、64 张 GPU
 ```
 
-#### Disaggregated Multi-Node Deployment {#disaggregated-multi-node-deployment}
+#### Prefill/Decode 分离多节点部署 {#disaggregated-multi-node-deployment}
 
-Combines prefill/decode disaggregation with multi-node parallelism for maximum scalability.
+将 Prefill/Decode 分离与多节点并行相结合，以获得最大的可扩展性。
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
@@ -351,14 +351,14 @@ Combines prefill/decode disaggregation with multi-node parallelism for maximum s
 └────────────────────────────────────────────┬────────────────────────────────────────────┘
                                              │
                               ┌──────────────┴──────────────┐
-                              │          Roles (2)          │
+                              │          角色 (2)           │
                               └──────────────┬──────────────┘
                                              │
                  ┌───────────────────────────┴───────────────────────────┐
                  │                                                       │
                  ▼                                                       ▼
 ┌───────────────────────────┐                           ┌───────────────────────────┐
-│      Role: prefill        │                           │      Role: decode         │
+│      角色: prefill        │                           │      角色: decode         │
 │  componentType: prefiller │                           │  componentType: decoder   │
 │  replicas: 1              │                           │  replicas: 2              │
 │  multinode:               │                           │  multinode:               │
@@ -368,96 +368,96 @@ Combines prefill/decode disaggregation with multi-node parallelism for maximum s
               ▼                                           ┌───────────┴───────────┐
 ┌─────────────────────────┐                               │                       │
 │    LeaderWorkerSet-0    │                               ▼                       ▼
-│       (2 Pods)          │                 ┌───────────────────────┐ ┌───────────────────────┐
-│    TP=16 across         │                 │   LeaderWorkerSet-0   │ │   LeaderWorkerSet-1   │
-│    16 GPUs              │                 │       (4 Pods)        │ │       (4 Pods)        │
-├─────────────────────────┤                 │    TP=32 across       │ │    TP=32 across       │
-│  ★ Leader Pod-0         │                 │    32 GPUs            │ │    32 GPUs            │
-│    [8 GPUs]             │                 ├───────────────────────┤ ├───────────────────────┤
+│       (2 个 Pod)        │                 ┌───────────────────────┐ ┌───────────────────────┐
+│    TP=16，跨            │                 │   LeaderWorkerSet-0   │ │   LeaderWorkerSet-1   │
+│    16 张 GPU            │                 │       (4 个 Pod)      │ │       (4 个 Pod)      │
+├─────────────────────────┤                 │    TP=32，跨          │ │    TP=32，跨          │
+│  ★ Leader Pod-0         │                 │    32 张 GPU          │ │    32 张 GPU          │
+│    [8 张 GPU]           │                 ├───────────────────────┤ ├───────────────────────┤
 │  ● Worker Pod-1         │                 │  ★ Leader Pod-0       │ │  ★ Leader Pod-0       │
-│    [8 GPUs]             │                 │    [8 GPUs]           │ │    [8 GPUs]           │
+│    [8 张 GPU]           │                 │    [8 张 GPU]         │ │    [8 张 GPU]         │
 └─────────────────────────┘                 │  ● Worker Pod-1       │ │  ● Worker Pod-1       │
-                                            │    [8 GPUs]           │ │    [8 GPUs]           │
+                                            │    [8 张 GPU]         │ │    [8 张 GPU]         │
                                             │  ● Worker Pod-2       │ │  ● Worker Pod-2       │
-                                            │    [8 GPUs]           │ │    [8 GPUs]           │
+                                            │    [8 张 GPU]         │ │    [8 张 GPU]         │
                                             │  ● Worker Pod-3       │ │  ● Worker Pod-3       │
-                                            │    [8 GPUs]           │ │    [8 GPUs]           │
+                                            │    [8 张 GPU]         │ │    [8 张 GPU]         │
                                             └───────────────────────┘ └───────────────────────┘
 
-      Total: prefill (1 × 2 nodes × 8 GPUs) + decode (2 × 4 nodes × 8 GPUs) = 16 + 64 = 80 GPUs
+      总计：Prefill（1 × 2 个节点 × 8 张 GPU）+ Decode（2 × 4 个节点 × 8 张 GPU）= 16 + 64 = 80 张 GPU
 ```
 
-### LeaderWorkerSet (LWS) Workload Management {#leaderworkerset-lws-workload-management}
+### LeaderWorkerSet（LWS）工作负载管理 {#leaderworkerset-lws-workload-management}
 
-The controller uses **LeaderWorkerSet (LWS)** for all deployments to provide unified workload management and gang scheduling support.
+Controller 对所有部署使用 **LeaderWorkerSet（LWS）**，以提供统一的工作负载管理和 Gang Scheduling 支持。
 
-| Configuration | LWS Mode | LWS Size | Scheduler | Description |
-|---------------|----------|----------|-----------|-------------|
-| `multinode` not set | Per-replica | `size: 1` | default | Single pod per replica |
-| `multinode.nodeCount >= 2` (monolithic) | Per-replica | `size: nodeCount` | volcano | One LWS per replica for independent scheduling |
-| PD disaggregated | Per-replica | `size: nodeCount` | volcano | Shared PodGroup across prefill/decode roles |
+| 配置 | LWS 模式 | LWS 大小 | 调度器 | 说明 |
+|------|----------|----------|--------|------|
+| 未设置 `multinode` | 每副本 | `size: 1` | default | 每个副本一个 Pod |
+| `multinode.nodeCount >= 2`（单体） | 每副本 | `size: nodeCount` | volcano | 每个副本一个 LWS，以便独立调度 |
+| PD 分离 | 每副本 | `size: nodeCount` | volcano | Prefill/Decode 角色共享 PodGroup |
 
-**LWS Mode:**
+**LWS 模式：**
 
-The controller always uses **Per-replica mode** (one LWS per replica) to support fine-grained scaling and cleanup.
+Controller 始终使用**每副本模式**（每个副本一个 LWS），以支持细粒度扩缩容和清理。
 
-| Mode | LWS Count | PodGroup Count | Use Case |
-|------|-----------|----------------|----------|
-| **Per-replica** | N per role (one per replica) | 1 shared (if gang scheduling needed) | All deployment scenarios |
+| 模式 | LWS 数量 | PodGroup 数量 | 使用场景 |
+|------|----------|---------------|----------|
+| **每副本** | 每个角色 N 个（每个副本一个） | 1 个共享 PodGroup（如果需要 Gang Scheduling） | 所有部署场景 |
 
-**Labels injected by Controller:**
+**Controller 注入的 Label：**
 
-| Label | Description |
-|-------|-------------|
-| `fusioninfer.io/service` | InferenceService name |
-| `fusioninfer.io/component-type` | Component type (worker/prefiller/decoder) |
-| `fusioninfer.io/role-name` | Role name from spec |
-| `fusioninfer.io/replica-index` | Replica index (only in per-replica mode) |
-| `fusioninfer.io/spec-hash` | Hash of resource spec for change detection |
+| Label | 说明 |
+|-------|------|
+| `fusioninfer.io/service` | InferenceService 名称 |
+| `fusioninfer.io/component-type` | 组件类型（worker/prefiller/decoder） |
+| `fusioninfer.io/role-name` | spec 中的角色名称 |
+| `fusioninfer.io/replica-index` | 副本索引（仅限每副本模式） |
+| `fusioninfer.io/spec-hash` | 用于变更检测的资源 spec 哈希值 |
 
-**Naming Convention:**
+**命名约定：**
 
-The complete naming chain from InferenceService to Pods:
+从 InferenceService 到 Pod 的完整命名链如下：
 
 ```
 InferenceService: <service-name>
          │
-         ▼ (Controller creates)
+         ▼（Controller 创建）
 LWS: <service>-<role>-<fusioninfer-replica>
          │
-         ▼ (LWS creates)
-Pods:
-  ├── <lws-name>-<lws-replica>              (Leader, no worker suffix)
-  └── <lws-name>-<lws-replica>-<worker>     (Workers, index starts from 1)
+         ▼（LWS 创建）
+Pod：
+  ├── <lws-name>-<lws-replica>              （Leader，无 worker 后缀）
+  └── <lws-name>-<lws-replica>-<worker>     （Worker，索引从 1 开始）
 ```
 
-| Resource | Naming Pattern | Example |
-|----------|----------------|---------|
+| 资源 | 命名模式 | 示例 |
+|------|----------|------|
 | LWS | `{service}-{role}-{replica}` | `qwen-inference-inference-0` |
 | Leader Pod | `{lws-name}-{lws-replica}` | `qwen-inference-inference-0-0` |
 | Worker Pod | `{lws-name}-{lws-replica}-{worker}` | `qwen-inference-inference-0-0-1` |
 
-> **Note**: The Leader pod does not have a worker index suffix. Worker pods have indices starting from 1.
+> **注意**：Leader Pod 没有 worker 索引后缀。Worker Pod 的索引从 1 开始。
 
-**Example: Pod Naming for Multi-Node Deployment**
+**示例：多节点部署的 Pod 命名**
 
-For an InferenceService named `deepseek-r1` with role `inference`, `replicas: 2`, and `nodeCount: 4`:
+对于名为 `deepseek-r1`、角色为 `inference`、`replicas: 2` 且 `nodeCount: 4` 的 InferenceService：
 
 ```
-deepseek-r1-inference-0          (LWS for replica 0)
-  ├── deepseek-r1-inference-0-0      (Leader)
-  ├── deepseek-r1-inference-0-0-1    (Worker 1)
-  ├── deepseek-r1-inference-0-0-2    (Worker 2)
-  └── deepseek-r1-inference-0-0-3    (Worker 3)
+deepseek-r1-inference-0          （副本 0 的 LWS）
+  ├── deepseek-r1-inference-0-0      （Leader）
+  ├── deepseek-r1-inference-0-0-1    （Worker 1）
+  ├── deepseek-r1-inference-0-0-2    （Worker 2）
+  └── deepseek-r1-inference-0-0-3    （Worker 3）
 
-deepseek-r1-inference-1          (LWS for replica 1)
-  ├── deepseek-r1-inference-1-0      (Leader)
-  ├── deepseek-r1-inference-1-0-1    (Worker 1)
-  ├── deepseek-r1-inference-1-0-2    (Worker 2)
-  └── deepseek-r1-inference-1-0-3    (Worker 3)
+deepseek-r1-inference-1          （副本 1 的 LWS）
+  ├── deepseek-r1-inference-1-0      （Leader）
+  ├── deepseek-r1-inference-1-0-1    （Worker 1）
+  ├── deepseek-r1-inference-1-0-2    （Worker 2）
+  └── deepseek-r1-inference-1-0-3    （Worker 3）
 ```
 
-**Example 1: Single-Node LWS**
+**示例 1：单节点 LWS**
 
 ```yaml
 apiVersion: leaderworkerset.x-k8s.io/v1
@@ -467,7 +467,7 @@ metadata:
 spec:
   replicas: 2
   leaderWorkerTemplate:
-    size: 1                    # Single pod per replica
+    size: 1                    # 每个副本一个 Pod
     workerTemplate:
       spec:
         containers:
@@ -481,16 +481,16 @@ spec:
                 nvidia.com/gpu: "1"
 ```
 
-**Example 2: Multi-Node LWS with Gang Scheduling**
+**示例 2：使用 Gang Scheduling 的多节点 LWS**
 
-For multi-node deployments (`replicas: 2, nodeCount: 4`), the **InferenceService Controller** creates:
-- **1 shared PodGroup** with `minTaskMember` for each replica
-- **Separate LWS per replica** to enable fine-grained scheduling
+对于多节点部署（`replicas: 2, nodeCount: 4`），**InferenceService Controller** 会创建：
+- **1 个共享 PodGroup**，其中包含每个副本的 `minTaskMember`
+- **每个副本独立的 LWS**，以支持细粒度调度
 
 ```
-InferenceService (replicas: 2, nodeCount: 4)
+InferenceService（replicas: 2, nodeCount: 4）
     │
-    ├── PodGroup: deepseek-r1-inference (shared)
+    ├── PodGroup: deepseek-r1-inference（共享）
     │   └── minTaskMember: {inference-0: 4, inference-1: 4}
     │
     ├── LWS: deepseek-r1-inference-inference-0
@@ -500,21 +500,21 @@ InferenceService (replicas: 2, nodeCount: 4)
         └── replicas: 1, size: 4, task-spec: inference-1
 ```
 
-This allows partial deployment when cluster resources are limited (e.g., only one replica can be scheduled).
+这样可在集群资源有限时进行部分部署（例如只能调度一个副本）。
 
 ```yaml
-# Shared PodGroup for the InferenceService
+# InferenceService 的共享 PodGroup
 apiVersion: scheduling.volcano.sh/v1beta1
 kind: PodGroup
 metadata:
   name: deepseek-r1-inference
 spec:
-  minMember: 8                       # 4 + 4 = 8 pods total
+  minMember: 8                       # 4 + 4 = 共 8 个 Pod
   minTaskMember:
-    inference-0: 4                   # All 4 pods in replica 0
-    inference-1: 4                   # All 4 pods in replica 1
+    inference-0: 4                   # 副本 0 中的全部 4 个 Pod
+    inference-1: 4                   # 副本 1 中的全部 4 个 Pod
 ---
-# Per-replica LWS (Controller creates one for each replica)
+# 每副本 LWS（Controller 为每个副本创建一个）
 apiVersion: leaderworkerset.x-k8s.io/v1
 kind: LeaderWorkerSet
 metadata:
@@ -525,10 +525,10 @@ metadata:
     fusioninfer.io/role-name: inference
     fusioninfer.io/replica-index: "0"
 spec:
-  replicas: 1                         # Always 1 in per-replica mode
+  replicas: 1                         # 每副本模式中始终为 1
   leaderWorkerTemplate:
-    size: 4                           # 4 pods per replica
-    # LeaderTemplate: Leader starts Ray head and runs vLLM
+    size: 4                           # 每个副本 4 个 Pod
+    # leaderTemplate：Leader 启动 Ray head 并运行 vLLM
     leaderTemplate:
       metadata:
         labels:
@@ -550,7 +550,7 @@ spec:
             resources:
               limits:
                 nvidia.com/gpu: "8"
-    # WorkerTemplate: Workers join Ray cluster
+    # workerTemplate：Worker 加入 Ray 集群
     workerTemplate:
       metadata:
         labels:
@@ -571,79 +571,79 @@ spec:
                 nvidia.com/gpu: "8"
 ```
 
-> **Note**: For multi-node deployments, the Controller automatically generates separate `leaderTemplate` and `workerTemplate`:
-> - **Leader**: `ray start --head && <original command> --distributed-executor-backend ray`
-> - **Worker**: `ray start --address=$LWS_LEADER_ADDRESS:6379 --block`
+> **注意**：对于多节点部署，Controller 会自动生成独立的 `leaderTemplate` 和 `workerTemplate`：
+> - **Leader**：`ray start --head && <original command> --distributed-executor-backend ray`
+> - **Worker**：`ray start --address=$LWS_LEADER_ADDRESS:6379 --block`
 
-### Gang Scheduling Behavior {#gang-scheduling-behavior}
+### Gang Scheduling 行为 {#gang-scheduling-behavior}
 
-The **InferenceService Controller** creates a **single shared PodGroup** per InferenceService. The `minTaskMember` field uses keys in the format `{roleName}-{replicaIndex}` to enable fine-grained gang scheduling that ensures:
+**InferenceService Controller** 为每个 InferenceService 创建**一个共享 PodGroup**。`minTaskMember` 字段使用 `{roleName}-{replicaIndex}` 格式的键，以实现细粒度 Gang Scheduling，并确保：
 
-1. **Intra-replica atomicity**: All pods within a single replica are scheduled together (all-or-nothing)
-2. **Cross-role coordination** (for PD disaggregated): At least one prefill AND one decode replica must be scheduled together
+1. **副本内原子性**：单个副本中的所有 Pod 一起调度（全有或全无）
+2. **跨角色协调**（适用于 PD 分离）：必须至少同时调度一个 Prefill 副本和一个 Decode 副本
 
-| Scenario | LWS Count | PodGroup Count | minTaskMember Keys |
-|----------|-----------|----------------|--------------------|
-| Monolithic (single-node) | 1 per replica | 0 | N/A (no gang scheduling) |
-| Monolithic (multi-node) | 1 per replica | 1 shared | `{role}-0`, `{role}-1`, ... |
-| PD disaggregated | 1 per replica | 1 shared | `prefill-0`, `decode-0`, `decode-1`, ... |
+| 场景 | LWS 数量 | PodGroup 数量 | minTaskMember 键 |
+|------|----------|---------------|-------------------|
+| 单体（单节点） | 每个副本 1 个 | 0 | N/A（无 Gang Scheduling） |
+| 单体（多节点） | 每个副本 1 个 | 1 个共享 PodGroup | `{role}-0`、`{role}-1`，... |
+| PD 分离 | 每个副本 1 个 | 1 个共享 PodGroup | `prefill-0`、`decode-0`、`decode-1`，... |
 
-**Example: PD Disaggregated Multi-Node (Story 4)**
+**示例：PD 分离多节点部署（故事 4）**
 
-For `prefill (1 replica × 2 nodes)` + `decode (2 replicas × 4 nodes)`:
+对于 `Prefill（1 个副本 × 2 个节点）` + `Decode（2 个副本 × 4 个节点）`：
 
 ```yaml
-# Single PodGroup for the entire InferenceService
+# 整个 InferenceService 使用一个 PodGroup
 apiVersion: scheduling.volcano.sh/v1beta1
 kind: PodGroup
 metadata:
   name: deepseek-r1-disagg
 spec:
-  minMember: 10              # 2 + 4 + 4 = 10 pods total
+  minMember: 10              # 2 + 4 + 4 = 共 10 个 Pod
   minTaskMember:
-    prefill-0: 2             # All 2 pods in prefill replica-0
-    decode-0: 4              # All 4 pods in decode replica-0
-    decode-1: 4              # All 4 pods in decode replica-1
+    prefill-0: 2             # Prefill 副本 0 中的全部 2 个 Pod
+    decode-0: 4              # Decode 副本 0 中的全部 4 个 Pod
+    decode-1: 4              # Decode 副本 1 中的全部 4 个 Pod
 ```
 
-**Scheduling Behavior Table:**
+**调度行为表：**
 
-| Cluster GPUs | prefill-0 (16 GPUs) | decode-0 (32 GPUs) | decode-1 (32 GPUs) | Service Status |
-|--------------|---------------------|--------------------|--------------------|----------------|
-| 80 GPUs | ✅ | ✅ | ✅ | Full capacity |
-| 64 GPUs | ✅ | ✅ | ⏳ | Partial (1P + 1D) |
-| 48 GPUs | ✅ | ✅ | ⏳ | Partial (1P + 1D) |
-| 32 GPUs | ⏳ | ⏳ | ⏳ | ❌ Blocked (can't satisfy 1P + 1D atomically) |
-| 16 GPUs | ⏳ | ⏳ | ⏳ | ❌ Blocked (only enough for prefill) |
+| 集群 GPU | prefill-0（16 张 GPU） | decode-0（32 张 GPU） | decode-1（32 张 GPU） | 服务状态 |
+|----------|------------------------|-----------------------|-----------------------|----------|
+| 80 张 GPU | ✅ | ✅ | ✅ | 全部容量 |
+| 64 张 GPU | ✅ | ✅ | ⏳ | 部分可用（1P + 1D） |
+| 48 张 GPU | ✅ | ✅ | ⏳ | 部分可用（1P + 1D） |
+| 32 张 GPU | ⏳ | ⏳ | ⏳ | ❌ 阻塞（无法以原子方式满足 1P + 1D） |
+| 16 张 GPU | ⏳ | ⏳ | ⏳ | ❌ 阻塞（资源只够 Prefill） |
 
-> **Note**: Volcano ensures each task's pods are scheduled atomically. With `minTaskMember`, the scheduler blocks until **all** pods within each task can be scheduled together, preventing partial deployments within a replica.
+> **注意**：Volcano 确保每个任务的 Pod 以原子方式调度。使用 `minTaskMember` 时，调度器会等待，直到任务内的**所有** Pod 都能一起调度，从而避免副本内出现部分部署。
 
-#### PodGroup Management {#podgroup-management}
+#### PodGroup 管理 {#podgroup-management}
 
-The **InferenceService Controller** creates **one PodGroup per InferenceService**. The `minTaskMember` keys use the format `{roleName}-{replicaIndex}` to identify each replica's task:
+**InferenceService Controller** 为**每个 InferenceService 创建一个 PodGroup**。`minTaskMember` 的键使用 `{roleName}-{replicaIndex}` 格式来标识每个副本的任务：
 
 ```yaml
-# PodGroup for PD disaggregated: prefill (2 replicas × 1 node) + decode (4 replicas × 1 node)
+# PD 分离部署的 PodGroup：Prefill（2 个副本 × 1 个节点）+ Decode（4 个副本 × 1 个节点）
 apiVersion: scheduling.volcano.sh/v1beta1
 kind: PodGroup
 metadata:
-  name: qwen3-inference              # Named after InferenceService
+  name: qwen3-inference              # 以 InferenceService 命名
   namespace: default
 spec:
-  minMember: 6                       # 2 + 4 = 6 pods
-  minTaskMember:                     # Matched by pod annotation: volcano.sh/task-spec
-    prefill-0: 1                     # Pods with annotation "volcano.sh/task-spec: prefill-0"
-    prefill-1: 1                     # Pods with annotation "volcano.sh/task-spec: prefill-1"
-    decode-0: 1                      # Pods with annotation "volcano.sh/task-spec: decode-0"
-    decode-1: 1                      # ... and so on
+  minMember: 6                       # 2 + 4 = 6 个 Pod
+  minTaskMember:                     # 通过 Pod annotation volcano.sh/task-spec 匹配
+    prefill-0: 1                     # annotation 为 "volcano.sh/task-spec: prefill-0" 的 Pod
+    prefill-1: 1                     # annotation 为 "volcano.sh/task-spec: prefill-1" 的 Pod
+    decode-0: 1                      # annotation 为 "volcano.sh/task-spec: decode-0" 的 Pod
+    decode-1: 1                      # ... 依此类推
     decode-2: 1
     decode-3: 1
 ```
 
-Each LWS is created per-replica with annotations to join the shared PodGroup:
+每个 LWS 都按副本创建，并通过 annotation 加入共享 PodGroup：
 
 ```yaml
-# Prefill LWS for replica 0 (Controller creates one LWS per replica)
+# 副本 0 的 Prefill LWS（Controller 为每个副本创建一个 LWS）
 apiVersion: leaderworkerset.x-k8s.io/v1
 kind: LeaderWorkerSet
 metadata:
@@ -654,24 +654,24 @@ metadata:
     fusioninfer.io/role-name: prefill
     fusioninfer.io/replica-index: "0"
 spec:
-  replicas: 1                        # Always 1 in per-replica mode
+  replicas: 1                        # 每副本模式中始终为 1
   leaderWorkerTemplate:
-    size: 1                          # 1 pod per replica (single-node)
+    size: 1                          # 每个副本 1 个 Pod（单节点）
     workerTemplate:
       metadata:
         labels:
           fusioninfer.io/replica-index: "0"
         annotations:
-          scheduling.k8s.io/group-name: qwen3-inference   # Join shared PodGroup
-          volcano.sh/task-spec: prefill-0                 # Task: {roleName}-{replicaIndex}
+          scheduling.k8s.io/group-name: qwen3-inference   # 加入共享 PodGroup
+          volcano.sh/task-spec: prefill-0                 # 任务：{roleName}-{replicaIndex}
       spec:
         schedulerName: volcano
         containers:
           - name: vllm
             image: vllm/vllm-openai:v0.26.0
-            # ... prefill config
+            # ... Prefill 配置
 ---
-# Decode LWS for replica 0
+# 副本 0 的 Decode LWS
 apiVersion: leaderworkerset.x-k8s.io/v1
 kind: LeaderWorkerSet
 metadata:
@@ -697,26 +697,26 @@ spec:
         containers:
           - name: vllm
             image: vllm/vllm-openai:v0.26.0
-            # ... decode config
+            # ... Decode 配置
 ```
 
-#### Key Annotations for Volcano Gang Scheduling {#key-annotations-for-volcano-gang-scheduling}
+#### Volcano Gang Scheduling 的关键 Annotation {#key-annotations-for-volcano-gang-scheduling}
 
-| Annotation | Defined In | Purpose |
-|------------|------------|---------|
-| `scheduling.k8s.io/group-name` | `volcano.sh/apis/pkg/apis/scheduling/v1beta1` | Identifies which PodGroup the pod belongs to |
-| `volcano.sh/task-spec` | `volcano.sh/apis/pkg/apis/batch/v1alpha1` | Identifies which task within the PodGroup (matches `minTaskMember` keys) |
+| Annotation | 定义位置 | 用途 |
+|------------|----------|------|
+| `scheduling.k8s.io/group-name` | `volcano.sh/apis/pkg/apis/scheduling/v1beta1` | 标识 Pod 所属的 PodGroup |
+| `volcano.sh/task-spec` | `volcano.sh/apis/pkg/apis/batch/v1alpha1` | 标识 PodGroup 内的任务（与 `minTaskMember` 的键匹配） |
 
-**Task-spec format:** `{roleName}-{replicaIndex}` (e.g., `prefill-0`, `decode-1`)
+**Task-spec 格式：** `{roleName}-{replicaIndex}`（例如 `prefill-0`、`decode-1`）
 
-**References:**
-- [Volcano MinTaskMember Design](https://github.com/volcano-sh/volcano/blob/master/docs/design/task-minavailable.md)
+**参考资料：**
+- [Volcano MinTaskMember 设计](https://github.com/volcano-sh/volcano/blob/master/docs/design/task-minavailable.md)
 - [Volcano Gang Scheduling](https://volcano.sh/en/docs/gang_scheduling/)
 
-### CRD Structure Overview {#crd-structure-overview}
+### CRD 结构概览 {#crd-structure-overview}
 
 ```go
-// ComponentType defines the type of component in the inference pipeline
+// ComponentType 定义推理流水线中的组件类型
 // +kubebuilder:validation:Enum=router;prefiller;decoder;worker
 type ComponentType string
 
@@ -727,127 +727,127 @@ const (
     ComponentTypeWorker    ComponentType = "worker"
 )
 
-// InferenceServiceSpec defines the desired state of InferenceService.
+// InferenceServiceSpec 定义 InferenceService 的期望状态。
 type InferenceServiceSpec struct {
-    // Roles is a list of logical components in the inference topology.
-    // Each role is identified by a user-defined Name and classified by ComponentType.
+    // Roles 是推理拓扑中的逻辑组件列表。
+    // 每个角色都由用户定义的 Name 标识，并按 ComponentType 分类。
     Roles []Role `json:"roles"`
     
-    // SchedulingStrategy applies cluster-wide scheduling policies (e.g., Volcano).
+    // SchedulingStrategy 应用集群范围的调度策略（例如 Volcano）。
     // +optional
     SchedulingStrategy *SchedulingStrategy `json:"schedulingStrategy,omitempty"`
 }
 
-// SchedulingStrategy defines pod-level scheduling behavior.
+// SchedulingStrategy 定义 Pod 级别的调度行为。
 type SchedulingStrategy struct {
-    // SchedulerName specifies the Kubernetes scheduler to use (e.g., "volcano").
+    // SchedulerName 指定要使用的 Kubernetes 调度器（例如 "volcano"）。
     // +optional
     SchedulerName string `json:"schedulerName,omitempty"`
 }
 
-// Role describes a logical component in the inference pipeline.
+// Role 描述推理流水线中的逻辑组件。
 type Role struct {
-    // Name is a user-defined, unique identifier for this component (e.g., "inference").
+    // Name 是该组件由用户定义的唯一标识符（例如 "inference"）。
     Name string `json:"name"`
 
-    // ComponentType indicates the semantic role. Valid values:
-    // - "worker": monolithic inference
-    // - "prefiller": prompt processing
-    // - "decoder": token generation
-    // - "router": request router with scheduling plugins
+    // ComponentType 表示语义角色。有效值：
+    // - "worker"：单体推理
+    // - "prefiller"：prompt 处理
+    // - "decoder"：token 生成
+    // - "router"：使用调度插件的请求路由器
     ComponentType ComponentType `json:"componentType"`
 
-    // Router-specific fields (only for componentType: router)
+    // Router 特有字段（仅用于 componentType: router）
     
-    // Strategy defines the routing strategy for the router component
+    // Strategy 定义 Router 组件的路由策略
     // +optional
     Strategy RoutingStrategy `json:"strategy,omitempty"`
     
-    // HTTPRoute defines the HTTPRoute spec for routing traffic (Gateway API)
+    // HTTPRoute 定义用于路由流量的 HTTPRoute 规范（Gateway API）
     // +optional
     HTTPRoute *runtime.RawExtension `json:"httproute,omitempty"`
     
-    // Gateway defines the Gateway spec for this router (Gateway API GatewaySpec)
+    // Gateway 定义该 Router 的 Gateway 规范（Gateway API GatewaySpec）
     // +optional
     Gateway *runtime.RawExtension `json:"gateway,omitempty"`
     
-    // EndpointPickerConfig is raw YAML for advanced EPP customization
+    // EndpointPickerConfig 是用于 EPP 高级定制的原始 YAML
     // +optional
     EndpointPickerConfig string `json:"endpointPickerConfig,omitempty"`
 
-    // Worker-specific fields (for prefiller/decoder/worker)
+    // Worker 特有字段（用于 prefiller/decoder/worker）
     
-    // Replicas specifies how many independent distributed instances to create.
-    // Default: 1
+    // Replicas 指定要创建多少个相互独立的分布式实例。
+    // 默认值：1
     // +optional
     Replicas *int32 `json:"replicas,omitempty"`
 
-    // Multinode enables distributed inference with a built-in Leader + Worker topology.
+    // Multinode 使用内置的 Leader + Worker 拓扑启用分布式推理。
     // +optional
     Multinode *Multinode `json:"multinode,omitempty"`
 
-    // Template defines the pod spec for this component.
-    // Uses runtime.RawExtension to avoid CRD size limits.
+    // Template 定义该组件的 Pod spec。
+    // 使用 runtime.RawExtension 避免 CRD 大小限制。
     // +optional
     Template *runtime.RawExtension `json:"template,omitempty"`
 }
 
-// Multinode enables multi-node distributed inference.
+// Multinode 启用多节点分布式推理。
 type Multinode struct {
-    // NodeCount is the number of distinct nodes to distribute this component across.
+    // NodeCount 是分布该组件所跨的不同节点数量。
     NodeCount int32 `json:"nodeCount"`
 }
 
-// InferenceServiceStatus reflects the observed state of the InferenceService.
+// InferenceServiceStatus 反映观察到的 InferenceService 状态。
 type InferenceServiceStatus struct {
-    // ObservedGeneration is the most recent generation observed by the controller.
+    // ObservedGeneration 是 Controller 最近观察到的 generation。
     // +optional
     ObservedGeneration int64 `json:"observedGeneration,omitempty"`
     
-    // Conditions represent the latest available observations of the service's state.
+    // Conditions 表示对服务状态的最新可用观察结果。
     Conditions []metav1.Condition `json:"conditions,omitempty"`
     
-    // Components summarizes the current state of each declared role/component.
-    // Key is the component's .spec.roles[].name.
+    // Components 汇总每个已声明角色/组件的当前状态。
+    // 键为组件的 .spec.roles[].name。
     // +optional
     Components map[string]ComponentStatus `json:"components,omitempty"`
 }
 
-// ComponentStatus captures the aggregated runtime state of a single inference component (role).
-// For example, with replica=2 and multinode.nodeCount=4:
-//   - DesiredReplicas: 2
-//   - NodesPerReplica: 4
-//   - TotalPods: 8 (2 * 4)
-//   - ReadyReplicas: 0/1/2 (a replica is ready only when all its nodes are ready)
-//   - ReadyPods: 0-8
+// ComponentStatus 捕获单个推理组件（角色）的聚合运行时状态。
+// 例如，replica=2 且 multinode.nodeCount=4 时：
+//   - DesiredReplicas：2
+//   - NodesPerReplica：4
+//   - TotalPods：8（2 * 4）
+//   - ReadyReplicas：0/1/2（仅当一个副本的所有节点均 Ready 时，该副本才 Ready）
+//   - ReadyPods：0-8
 type ComponentStatus struct {
-    // DesiredReplicas is the number of replicas requested (from spec.roles[].replica).
+    // DesiredReplicas 是请求的副本数（来自 spec.roles[].replica）。
     DesiredReplicas int32 `json:"desiredReplicas"`
     
-    // ReadyReplicas is the number of replicas that are fully ready.
-    // For multi-node replicas, a replica is ready only when all its nodes are ready.
+    // ReadyReplicas 是完全 Ready 的副本数。
+    // 对于多节点副本，仅当其所有节点均 Ready 时，该副本才 Ready。
     ReadyReplicas int32 `json:"readyReplicas"`
     
-    // NodesPerReplica is the number of nodes per replica (from spec.roles[].multinode.nodeCount).
-    // Defaults to 1 when multinode is not configured.
+    // NodesPerReplica 是每个副本的节点数（来自 spec.roles[].multinode.nodeCount）。
+    // 未配置 multinode 时默认为 1。
     NodesPerReplica int32 `json:"nodesPerReplica"`
     
-    // TotalPods is the total number of pods desired (= DesiredReplicas * NodesPerReplica).
+    // TotalPods 是期望的 Pod 总数（= DesiredReplicas * NodesPerReplica）。
     TotalPods int32 `json:"totalPods"`
     
-    // ReadyPods is the total number of ready pods across all replicas.
+    // ReadyPods 是所有副本中 Ready Pod 的总数。
     ReadyPods int32 `json:"readyPods"`
     
-    // Phase indicates the high-level lifecycle stage of this component.
-    // Possible values: Pending, Deploying, Running, Failed, Unknown.
+    // Phase 表示该组件的高层生命周期阶段。
+    // 可能的值：Pending、Deploying、Running、Failed、Unknown。
     Phase ComponentPhase `json:"phase"`
     
-    // LastUpdateTime is the timestamp when this component's status was last updated.
+    // LastUpdateTime 是上次更新该组件状态时的时间戳。
     // +optional
     LastUpdateTime *metav1.Time `json:"lastUpdateTime,omitempty"`
 }
 
-// ComponentPhase is a simple, high-level summary of where the component is in its lifecycle.
+// ComponentPhase 是组件所处生命周期阶段的简单高层摘要。
 // +kubebuilder:validation:Enum=Pending;Deploying;Running;Failed;Unknown
 type ComponentPhase string
 
