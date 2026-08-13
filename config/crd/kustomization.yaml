@@ -4,6 +4,8 @@
 resources:
 - bases/fusioninfer.io_inferenceservices.yaml
 - bases/fusioninfer.io_modelloaders.yaml
+- bases/fusioninfer.io_models.yaml
+- bases/fusioninfer.io_clustermodels.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

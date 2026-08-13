@@ -17,4 +17,8 @@ limitations under the License.
 
 package v1alpha1
 
+type ClusterModelExpansion interface{}
+
 type InferenceServiceExpansion interface{}
+
+type ModelExpansion interface{}

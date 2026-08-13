@@ -1,0 +1,12 @@
+apiVersion: fusioninfer.io/v1alpha1
+kind: Model
+metadata:
+  labels:
+    app.kubernetes.io/name: fusioninfer
+    app.kubernetes.io/managed-by: kustomize
+  name: qwen3-8b-r1
+  namespace: default
+spec:
+  source:
+    uri: hf://Qwen/Qwen3-8B
+    revision: 0123456789abcdef0123456789abcdef01234567

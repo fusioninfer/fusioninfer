@@ -28,4 +28,10 @@ resources:
 - inferenceservice_admin_role.yaml
 - inferenceservice_editor_role.yaml
 - inferenceservice_viewer_role.yaml
+- model_admin_role.yaml
+- model_editor_role.yaml
+- model_viewer_role.yaml
+- clustermodel_admin_role.yaml
+- clustermodel_editor_role.yaml
+- clustermodel_viewer_role.yaml
 

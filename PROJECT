@@ -25,4 +25,20 @@ resources:
   kind: ModelLoader
   path: github.com/fusioninfer/fusioninfer/api/core/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: false
+  domain: fusioninfer.io
+  kind: Model
+  path: github.com/fusioninfer/fusioninfer/api/core/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: false
+  controller: false
+  domain: fusioninfer.io
+  kind: ClusterModel
+  path: github.com/fusioninfer/fusioninfer/api/core/v1alpha1
+  version: v1alpha1
 version: "3"

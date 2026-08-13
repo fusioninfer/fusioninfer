@@ -2,4 +2,6 @@
 resources:
 - v1alpha1_inferenceservice.yaml
 - v1alpha1_modelloader.yaml
+- v1alpha1_model.yaml
+- v1alpha1_clustermodel.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples
