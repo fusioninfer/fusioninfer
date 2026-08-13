@@ -1,0 +1,146 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: models.fusioninfer.io
+spec:
+  group: fusioninfer.io
+  names:
+    kind: Model
+    listKind: ModelList
+    plural: models
+    singular: model
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Model is a namespaced immutable model artifact declaration.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Spec declares the model artifact.
+            properties:
+              lora:
+                description: LoRA identifies this artifact as a LoRA and names its
+                  base model.
+                properties:
+                  baseModelRef:
+                    description: BaseModelRef identifies the compatible base model.
+                    properties:
+                      kind:
+                        description: Kind is the referenced resource kind.
+                        enum:
+                        - Model
+                        - ClusterModel
+                        type: string
+                      name:
+                        description: Name is the referenced resource name.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    type: object
+                required:
+                - baseModelRef
+                type: object
+              source:
+                description: Source identifies the immutable model artifact.
+                properties:
+                  credentialsRef:
+                    description: CredentialsRef names a Secret used to access the
+                      source.
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  digest:
+                    description: Digest verifies artifact content.
+                    pattern: ^sha256:[0-9a-f]{64}$
+                    type: string
+                  revision:
+                    description: Revision is the full commit SHA for a Hugging Face
+                      source.
+                    pattern: ^[0-9a-f]{40}$
+                    type: string
+                  uri:
+                    description: URI is the model artifact location.
+                    minLength: 1
+                    type: string
+                required:
+                - uri
+                type: object
+                x-kubernetes-validations:
+                - message: uri must use a supported lowercase scheme and identify
+                    an artifact
+                  rule: self.uri.matches('^(hf|s3|oci|pvc)://.+$')
+                - message: uri must use valid URI characters; encode spaces and non-ASCII
+                    characters
+                  rule: self.uri.matches('^[A-Za-z0-9._~:/@!$&()*+,;=%-]+$')
+                - message: hf uri must identify a repository as hf://<owner>/<name>
+                  rule: '!self.uri.startsWith(''hf://'') || self.uri.matches(''^hf://[^/?#]+/[^/?#]+$'')'
+                - message: s3 uri must identify a bucket and prefix
+                  rule: '!self.uri.startsWith(''s3://'') || self.uri.matches(''^s3://[^/?#]+/[^/?#]+(/[^/?#]+)*$'')'
+                - message: pvc uri must identify a Kubernetes claim name and subpath
+                  rule: '!self.uri.startsWith(''pvc://'') || self.uri.matches(''^pvc://[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*/[^/?#]+(/[^/?#]+)*$'')'
+                - message: pvc claim name must not exceed 253 characters
+                  rule: '!self.uri.startsWith(''pvc://'') || self.uri.matches(''^pvc://[^/]{1,253}/.+$'')'
+                - message: uri must not contain a query string or fragment
+                  rule: '!self.uri.contains(''?'') && !self.uri.contains(''#'')'
+                - message: uri must not contain dot path segments
+                  rule: '!self.uri.contains(''/./'') && !self.uri.contains(''/../'')
+                    && !self.uri.endsWith(''/.'') && !self.uri.endsWith(''/..'')'
+                - message: hf sources require a full lowercase commit SHA revision
+                  rule: '!self.uri.startsWith(''hf://'') || (has(self.revision) &&
+                    self.revision.matches(''^[0-9a-f]{40}$''))'
+                - message: s3 and pvc sources require a digest
+                  rule: '!(self.uri.startsWith(''s3://'') || self.uri.startsWith(''pvc://''))
+                    || has(self.digest)'
+                - message: oci uri must identify an artifact and include its descriptor
+                    digest
+                  rule: '!self.uri.startsWith(''oci://'') || self.uri.matches(''^oci://[^/?#]+/[^/?#@]+(/[^/?#@]+)*@sha256:[0-9a-f]{64}$'')'
+                - message: pvc sources do not allow credentialsRef
+                  rule: '!self.uri.startsWith(''pvc://'') || !has(self.credentialsRef)'
+                - message: credentialsRef.name must be a valid Kubernetes object name
+                  rule: '!has(self.credentialsRef) || (has(self.credentialsRef.name)
+                    && size(self.credentialsRef.name) <= 253 && self.credentialsRef.name.matches(''^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$''))'
+            required:
+            - source
+            type: object
+            x-kubernetes-validations:
+            - message: spec is immutable
+              rule: self == oldSelf
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true

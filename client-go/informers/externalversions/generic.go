@@ -52,8 +52,12 @@ func (f *genericInformer) Lister() cache.GenericLister {
 func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource) (GenericInformer, error) {
 	switch resource {
 	// Group=fusioninfer.io, Version=v1alpha1
+	case v1alpha1.SchemeGroupVersion.WithResource("clustermodels"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Fusioninfer().V1alpha1().ClusterModels().Informer()}, nil
 	case v1alpha1.SchemeGroupVersion.WithResource("inferenceservices"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Fusioninfer().V1alpha1().InferenceServices().Informer()}, nil
+	case v1alpha1.SchemeGroupVersion.WithResource("models"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Fusioninfer().V1alpha1().Models().Informer()}, nil
 
 	}
 

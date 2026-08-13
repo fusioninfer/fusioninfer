@@ -1,0 +1,11 @@
+apiVersion: fusioninfer.io/v1alpha1
+kind: ClusterModel
+metadata:
+  labels:
+    app.kubernetes.io/name: fusioninfer
+    app.kubernetes.io/managed-by: kustomize
+  name: qwen3-14b-shared-r1
+spec:
+  source:
+    uri: hf://Qwen/Qwen3-14B
+    revision: 89abcdef0123456789abcdef0123456789abcdef

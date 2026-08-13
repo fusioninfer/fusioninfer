@@ -17,6 +17,10 @@ limitations under the License.
 
 package v1alpha1
 
+// ClusterModelListerExpansion allows custom methods to be added to
+// ClusterModelLister.
+type ClusterModelListerExpansion interface{}
+
 // InferenceServiceListerExpansion allows custom methods to be added to
 // InferenceServiceLister.
 type InferenceServiceListerExpansion interface{}
@@ -24,3 +28,11 @@ type InferenceServiceListerExpansion interface{}
 // InferenceServiceNamespaceListerExpansion allows custom methods to be added to
 // InferenceServiceNamespaceLister.
 type InferenceServiceNamespaceListerExpansion interface{}
+
+// ModelListerExpansion allows custom methods to be added to
+// ModelLister.
+type ModelListerExpansion interface{}
+
+// ModelNamespaceListerExpansion allows custom methods to be added to
+// ModelNamespaceLister.
+type ModelNamespaceListerExpansion interface{}

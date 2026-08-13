@@ -23,8 +23,12 @@ import (
 
 // Interface provides access to all the informers in this group version.
 type Interface interface {
+	// ClusterModels returns a ClusterModelInformer.
+	ClusterModels() ClusterModelInformer
 	// InferenceServices returns a InferenceServiceInformer.
 	InferenceServices() InferenceServiceInformer
+	// Models returns a ModelInformer.
+	Models() ModelInformer
 }
 
 type version struct {
@@ -38,7 +42,17 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 	return &version{factory: f, namespace: namespace, tweakListOptions: tweakListOptions}
 }
 
+// ClusterModels returns a ClusterModelInformer.
+func (v *version) ClusterModels() ClusterModelInformer {
+	return &clusterModelInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+}
+
 // InferenceServices returns a InferenceServiceInformer.
 func (v *version) InferenceServices() InferenceServiceInformer {
 	return &inferenceServiceInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
+// Models returns a ModelInformer.
+func (v *version) Models() ModelInformer {
+	return &modelInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }

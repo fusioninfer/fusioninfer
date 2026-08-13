@@ -1,0 +1,23 @@
+# This rule is not used by the project fusioninfer itself.
+# It is provided to allow the cluster admin to help manage permissions for users.
+#
+# Grants read-only access to ClusterModel resources.
+# This role is intended for users who need visibility into these resources
+# without permissions to modify them.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: fusioninfer
+    app.kubernetes.io/managed-by: kustomize
+  name: clustermodel-viewer-role
+rules:
+- apiGroups:
+  - fusioninfer.io
+  resources:
+  - clustermodels
+  verbs:
+  - get
+  - list
+  - watch
