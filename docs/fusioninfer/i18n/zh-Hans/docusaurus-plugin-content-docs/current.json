@@ -1,0 +1,22 @@
+{
+  "version.label": {
+    "message": "下一版本",
+    "description": "The label for version current"
+  },
+  "sidebar.tutorialSidebar.category.getting-started": {
+    "message": "入门",
+    "description": "The label for category 'Getting Started' in sidebar 'tutorialSidebar'"
+  },
+  "sidebar.tutorialSidebar.category.user-guide": {
+    "message": "用户指南",
+    "description": "The label for category 'User Guide' in sidebar 'tutorialSidebar'"
+  },
+  "sidebar.tutorialSidebar.category.design": {
+    "message": "设计",
+    "description": "The label for category 'Design' in sidebar 'tutorialSidebar'"
+  },
+  "sidebar.tutorialSidebar.category.developer-guide": {
+    "message": "开发者指南",
+    "description": "The label for category 'Developer Guide' in sidebar 'tutorialSidebar'"
+  }
+}

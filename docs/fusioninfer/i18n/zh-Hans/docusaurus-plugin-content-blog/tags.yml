@@ -1,0 +1,14 @@
+kubernetes:
+  label: Kubernetes
+  permalink: /kubernetes
+  description: 关于 Kubernetes 原生编排与基础设施的内容。
+
+llm-inference:
+  label: LLM 推理
+  permalink: /llm-inference
+  description: 关于大语言模型推理与服务的内容。
+
+platform-engineering:
+  label: 平台工程
+  permalink: /platform-engineering
+  description: 关于构建和运维推理平台的内容。

@@ -101,3 +101,32 @@ jobs:
       - name: Build Docker image
         run: make docker-build
 
+  docs:
+    name: Docs Site
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs/fusioninfer
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: docs/fusioninfer/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check translated content
+        run: npm run check:i18n
+
+      - name: Typecheck docs site
+        run: npm run typecheck
+
+      - name: Build docs site
+        run: npm run build
+

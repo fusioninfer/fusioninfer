@@ -1,0 +1,114 @@
+diff --git a/node_modules/@docusaurus/theme-classic/lib/theme/NavbarItem/LocaleDropdownNavbarItem/index.js b/node_modules/@docusaurus/theme-classic/lib/theme/NavbarItem/LocaleDropdownNavbarItem/index.js
+index 340753f..c8d2dc6 100644
+--- a/node_modules/@docusaurus/theme-classic/lib/theme/NavbarItem/LocaleDropdownNavbarItem/index.js
++++ b/node_modules/@docusaurus/theme-classic/lib/theme/NavbarItem/LocaleDropdownNavbarItem/index.js
+@@ -57,6 +57,21 @@ function useLocaleDropdownUtils() {
+       );
+       return `${getBaseURLForLocale(locale)}${finalSearch}${hash}`;
+     },
++    getMobileHref: (locale, url) => {
++      const usesPathnameProtocol = url.startsWith('pathname://');
++      const href = url.replace(/^pathname:\/\//, '');
++      const localeBaseUrl = getLocaleConfig(locale).baseUrl;
++      const currentBaseUrl = siteConfig.baseUrl.replace(/\/$/, '');
++      const duplicatedBaseUrl = `${localeBaseUrl}${currentBaseUrl}`;
++      const normalizedHref =
++        currentBaseUrl && href.startsWith(duplicatedBaseUrl)
++          ? `${localeBaseUrl}${href.slice(duplicatedBaseUrl.length)}`
++          : href;
++      // Let Docusaurus Link force a full-page navigation between locale builds.
++      return usesPathnameProtocol
++        ? `pathname://${normalizedHref}`
++        : normalizedHref;
++    },
+     getLabel: (locale) => {
+       return getLocaleConfig(locale).label;
+     },
+@@ -77,10 +92,12 @@ export default function LocaleDropdownNavbarItem({
+     i18n: {currentLocale, locales},
+   } = useDocusaurusContext();
+   const localeItems = locales.map((locale) => {
++    const to = utils.getURL(locale, {queryString});
+     return {
+       label: utils.getLabel(locale),
+       lang: utils.getLang(locale),
+-      to: utils.getURL(locale, {queryString}),
++      to,
++      ...(mobile && {href: utils.getMobileHref(locale, to)}),
+       target: '_self',
+       autoAddBaseUrl: false,
+       className:
+diff --git a/node_modules/@docusaurus/theme-classic/lib/theme/NavbarItem/NavbarNavLink.js b/node_modules/@docusaurus/theme-classic/lib/theme/NavbarItem/NavbarNavLink.js
+index 54045af..942e8ca 100644
+--- a/node_modules/@docusaurus/theme-classic/lib/theme/NavbarItem/NavbarNavLink.js
++++ b/node_modules/@docusaurus/theme-classic/lib/theme/NavbarItem/NavbarNavLink.js
+@@ -26,7 +26,11 @@ export default function NavbarNavLink({
+   const toUrl = useBaseUrl(to);
+   const activeBaseUrl = useBaseUrl(activeBasePath);
+   const normalizedHref = useBaseUrl(href, {forcePrependBaseUrl: true});
+-  const isExternalLink = label && href && !isInternalUrl(href);
++  const isExternalLink =
++    label &&
++    href &&
++    !href.startsWith('pathname://') &&
++    !isInternalUrl(href);
+   // Link content is set through html XOR label
+   const linkContentProps = html
+     ? {dangerouslySetInnerHTML: {__html: html}}
+diff --git a/node_modules/@docusaurus/theme-classic/src/theme/NavbarItem/LocaleDropdownNavbarItem/index.tsx b/node_modules/@docusaurus/theme-classic/src/theme/NavbarItem/LocaleDropdownNavbarItem/index.tsx
+index 9c16b53..40453b0 100644
+--- a/node_modules/@docusaurus/theme-classic/src/theme/NavbarItem/LocaleDropdownNavbarItem/index.tsx
++++ b/node_modules/@docusaurus/theme-classic/src/theme/NavbarItem/LocaleDropdownNavbarItem/index.tsx
+@@ -65,6 +65,21 @@ function useLocaleDropdownUtils() {
+       );
+       return `${getBaseURLForLocale(locale)}${finalSearch}${hash}`;
+     },
++    getMobileHref: (locale: string, url: string) => {
++      const usesPathnameProtocol = url.startsWith('pathname://');
++      const href = url.replace(/^pathname:\/\//, '');
++      const localeBaseUrl = getLocaleConfig(locale).baseUrl;
++      const currentBaseUrl = siteConfig.baseUrl.replace(/\/$/, '');
++      const duplicatedBaseUrl = `${localeBaseUrl}${currentBaseUrl}`;
++      const normalizedHref =
++        currentBaseUrl && href.startsWith(duplicatedBaseUrl)
++          ? `${localeBaseUrl}${href.slice(duplicatedBaseUrl.length)}`
++          : href;
++      // Let Docusaurus Link force a full-page navigation between locale builds.
++      return usesPathnameProtocol
++        ? `pathname://${normalizedHref}`
++        : normalizedHref;
++    },
+     getLabel: (locale: string) => {
+       return getLocaleConfig(locale).label;
+     },
+@@ -87,10 +102,12 @@ export default function LocaleDropdownNavbarItem({
+     i18n: {currentLocale, locales},
+   } = useDocusaurusContext();
+   const localeItems = locales.map((locale): LinkLikeNavbarItemProps => {
++    const to = utils.getURL(locale, {queryString});
+     return {
+       label: utils.getLabel(locale),
+       lang: utils.getLang(locale),
+-      to: utils.getURL(locale, {queryString}),
++      to,
++      ...(mobile && {href: utils.getMobileHref(locale, to)}),
+       target: '_self',
+       autoAddBaseUrl: false,
+       className:
+diff --git a/node_modules/@docusaurus/theme-classic/src/theme/NavbarItem/NavbarNavLink.tsx b/node_modules/@docusaurus/theme-classic/src/theme/NavbarItem/NavbarNavLink.tsx
+index 52e198d..4a72b03 100644
+--- a/node_modules/@docusaurus/theme-classic/src/theme/NavbarItem/NavbarNavLink.tsx
++++ b/node_modules/@docusaurus/theme-classic/src/theme/NavbarItem/NavbarNavLink.tsx
+@@ -29,7 +29,11 @@ export default function NavbarNavLink({
+   const toUrl = useBaseUrl(to);
+   const activeBaseUrl = useBaseUrl(activeBasePath);
+   const normalizedHref = useBaseUrl(href, {forcePrependBaseUrl: true});
+-  const isExternalLink = label && href && !isInternalUrl(href);
++  const isExternalLink =
++    label &&
++    href &&
++    !href.startsWith('pathname://') &&
++    !isInternalUrl(href);
+ 
+   // Link content is set through html XOR label
+   const linkContentProps = html

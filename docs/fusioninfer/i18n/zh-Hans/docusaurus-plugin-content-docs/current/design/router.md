@@ -1,42 +1,42 @@
 ---
 sidebar_position: 2
-title: Router Controller
+title: Router 控制器
 ---
 
-:::warning Legacy API design
-This page documents routing generated from the existing `InferenceService` v1alpha1 API. In the target [`InferenceDeployment` design](./inference-deployment.md), Gateway attachment is configured through `spec.endpoint`, Aggregated routing policy is configured through `spec.endpoint.endpointPicker`, and Prefill/Decode routing is inferred from the referenced RuntimeProfile roles.
+:::warning 旧版 API 设计
+本页记录由现有 `InferenceService` v1alpha1 API 生成的路由。在目标 [`InferenceDeployment` 设计](./inference-deployment.md)中，Gateway 关联通过 `spec.endpoint` 配置，Aggregated 路由策略通过 `spec.endpoint.endpointPicker` 配置，而 Prefill/Decode 路由则根据引用的 RuntimeProfile 角色推断。
 :::
 
-# Router Controller {#router-controller}
+# Router 控制器 {#router-controller}
 
-## Summary {#summary}
+## 概述 {#summary}
 
-The FusionInfer Router Controller enables automatic creation and management of Gateway API Inference Extension resources based on `InferenceService` CRDs. This integration transforms FusionInfer-managed inference workloads into optimized inference routing systems by leveraging the Endpoint Picker (EPP) for intelligent request routing, prefix-cache aware scheduling, and load balancing.
+FusionInfer Router 控制器支持根据 `InferenceService` CRD 自动创建和管理 Gateway API Inference Extension 资源。此集成利用 Endpoint Picker (EPP) 实现智能请求路由、prefix cache 感知调度和负载均衡，将 FusionInfer 管理的推理工作负载转换为经过优化的推理路由系统。
 
-When an `InferenceService` is created with a role having `componentType: router`, the FusionInfer Router Controller generates an `InferencePool`, an `HTTPRoute`, and the EPP ServiceAccount, RBAC, ConfigMap, Deployment, and Service resources. The generated `HTTPRoute` attaches to an existing Gateway through the configured `parentRefs`; FusionInfer does not create the Gateway itself. The EPP configuration supports prefix-cache optimization, KV-cache utilization based routing, queue-aware scheduling, LoRA adapter affinity, and disaggregated prefill/decode architectures.
+创建的 `InferenceService` 中包含 `componentType: router` 的角色时，FusionInfer Router 控制器会生成 `InferencePool`、`HTTPRoute`，以及 EPP 的 ServiceAccount、RBAC、ConfigMap、Deployment 和 Service 资源。生成的 `HTTPRoute` 通过配置的 `parentRefs` 关联到现有 Gateway；FusionInfer 不会创建 Gateway 本身。EPP 配置支持 prefix cache 优化、基于 KV cache 利用率的路由、queue size 感知调度、LoRA 适配器亲和性，以及分离式 Prefill/Decode 架构。
 
-## Motivation {#motivation}
+## 动机 {#motivation}
 
-Self-hosted LLM inference workloads on Kubernetes face significant challenges around request routing, load balancing, and resource utilization. Traditional load balancers are not aware of model-specific characteristics such as KV-cache state, prefix caching opportunities, or the distinction between prefill and decode phases. This leads to suboptimal performance, increased latency, and inefficient GPU utilization.
+Kubernetes 上的自托管 LLM 推理工作负载在请求路由、负载均衡和资源利用率方面面临重大挑战。传统负载均衡器不了解模型特有的特征，例如 KV cache 状态、prefix cache 复用机会，或 Prefill 阶段与 Decode 阶段之间的区别。这会导致性能不佳、延迟增加以及 GPU 利用率低下。
 
-The Gateway API Inference Extension provides sophisticated routing capabilities specifically designed for inference workloads, but requires manual configuration of multiple CRDs and deep understanding of the plugin ecosystem. FusionInfer simplifies this by providing a higher-level abstraction with predefined routing strategies while still allowing advanced users to customize the full `EndpointPickerConfig` when needed.
+Gateway API Inference Extension 提供了专为推理工作负载设计的高级路由能力，但需要手动配置多个 CRD，并深入了解插件生态系统。FusionInfer 提供带有预定义路由策略的更高层抽象，从而简化这一过程，同时仍允许高级用户在需要时自定义完整的 `EndpointPickerConfig`。
 
-### Goals {#goals}
+### 目标 {#goals}
 
-- **Automatic Router Resource Generation**: Create and manage `InferencePool`, `HTTPRoute`, and the EPP workload and configuration resources from an `InferenceService`
-- **Predefined Routing Strategies**: Provide simple, declarative routing strategies (`prefix-cache`, `kv-cache-utilization`, `queue-size`, `lora-affinity`, `pd-disaggregation`) for common use cases
-- **Advanced Customization**: Allow power users to provide custom `EndpointPickerConfig` for fine-grained control
+- **自动生成 Router 资源**：根据 `InferenceService` 创建和管理 `InferencePool`、`HTTPRoute`，以及 EPP 工作负载和配置资源
+- **预定义路由策略**：为常见用例提供简单的声明式路由策略（`prefix-cache`、`kv-cache-utilization`、`queue-size`、`lora-affinity`、`pd-disaggregation`）
+- **高级自定义**：允许高级用户提供自定义 `EndpointPickerConfig`，以实现精细控制
 
-### Non-Goals {#non-goals}
+### 非目标 {#non-goals}
 
-- **Workload Management**: This design focuses only on router/gateway integration; actual pod/deployment management is handled by other FusionInfer components
-- **Gateway Implementation**: This does not implement a new gateway, but integrates with existing Gateway API compliant gateways via Envoy ext-proc
+- **工作负载管理**：本设计仅关注 Router/Gateway 集成；实际的 Pod/Deployment 管理由其他 FusionInfer 组件负责
+- **Gateway 实现**：本设计不实现新的 Gateway，而是通过 Envoy ext-proc 与现有符合 Gateway API 的 Gateway 集成
 
-### User Stories {#user-stories}
+### 用户故事 {#user-stories}
 
-#### Story 1: Prefix Cache Aware Routing {#story-1-prefix-cache-aware-routing}
+#### 故事 1：prefix cache 感知路由 {#story-1-prefix-cache-aware-routing}
 
-As a platform engineer, I want to deploy a Qwen model with prefix cache aware routing so that requests sharing the longest prefixes are routed to the same server to maximize KV-cache reuse.
+作为平台工程师，我希望部署一个采用 prefix cache 感知路由的 Qwen 模型，使共享最长前缀的请求被路由到同一服务器，从而最大限度地复用 KV cache。
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -66,11 +66,11 @@ spec:
                 - --model=Qwen/Qwen2.5-7B-Instruct
 ```
 
-This would automatically create an `InferencePool` pointing to the inference pods and configure EPP with prefix-cache aware scheduling.
+这会自动创建指向推理 Pod 的 `InferencePool`，并为 EPP 配置 prefix cache 感知调度。
 
-#### Story 2: KV-Cache Utilization Based Load Balancing {#story-2-kv-cache-utilization-based-load-balancing}
+#### 故事 2：基于 KV cache 利用率的负载均衡 {#story-2-kv-cache-utilization-based-load-balancing}
 
-As an ML engineer, I want to distribute inference requests based on available KV-cache memory to prevent OOM errors and ensure even resource utilization across all inference servers.
+作为 ML 工程师，我希望根据可用 KV cache 内存分发推理请求，以避免 OOM 错误，并确保所有推理服务器之间的资源利用率均衡。
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -100,11 +100,11 @@ spec:
                 - --model=/models/llama-70b
 ```
 
-This configuration routes requests to servers with the most available KV-cache memory, preventing memory exhaustion and ensuring balanced utilization.
+此配置会将请求路由到可用 KV cache 内存最多的服务器，从而避免内存耗尽，并确保利用率均衡。
 
-#### Story 3: Disaggregated Prefill/Decode Architecture {#story-3-disaggregated-prefilldecode-architecture}
+#### 故事 3：分离式 Prefill/Decode 架构 {#story-3-disaggregated-prefilldecode-architecture}
 
-As an infrastructure engineer, I want to deploy a disaggregated serving architecture where prefill (prompt processing) and decode (token generation) are handled by specialized server pools for optimal hardware utilization and latency.
+作为基础设施工程师，我希望部署一种分离式服务架构，其中 Prefill（提示词处理）和 Decode（token 生成）由专用服务器池处理，以优化硬件利用率和延迟。
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -147,46 +147,46 @@ spec:
                 - --kv-transfer-config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
 ```
 
-## Proposal {#proposal}
+## 提案 {#proposal}
 
-The FusionInfer Router Controller watches for `InferenceService` resources that include roles with `componentType: router`. When detected, it automatically generates and manages Gateway API Inference Extension resources to enable intelligent request routing and load balancing for LLM inference workloads.
+FusionInfer Router 控制器会监视包含 `componentType: router` 角色的 `InferenceService` 资源。检测到此类资源后，它会自动生成并管理 Gateway API Inference Extension 资源，从而为 LLM 推理工作负载提供智能请求路由和负载均衡。
 
-The router role supports two configuration approaches:
-1. **Simple strategy-based**: Use predefined routing strategies (`prefix-cache`, `kv-cache-utilization`, `queue-size`, `lora-affinity`, `pd-disaggregation`) for common use cases
-2. **Advanced custom configuration**: Provide a complete `endpointPickerConfig` for fine-grained control over scheduling plugins, profiles, and scoring algorithms
+Router 角色支持两种配置方式：
+1. **基于简单策略的配置**：为常见用例使用预定义路由策略（`prefix-cache`、`kv-cache-utilization`、`queue-size`、`lora-affinity`、`pd-disaggregation`）
+2. **高级自定义配置**：提供完整的 `endpointPickerConfig`，以精细控制调度插件、Profile 和评分算法
 
-These configurations are translated into an `InferencePool`, an `HTTPRoute`, and an EPP deployment with its supporting ServiceAccount, RBAC, Service, and ConfigMap. The resulting `HTTPRoute` references an existing Gateway, while the EPP configuration controls routing based on factors such as prefix cache hits, memory utilization, and workload characteristics.
+这些配置会转换为 `InferencePool`、`HTTPRoute`，以及包含配套 ServiceAccount、RBAC、Service 和 ConfigMap 的 EPP Deployment。生成的 `HTTPRoute` 引用现有 Gateway，而 EPP 配置则根据 prefix cache 命中、内存利用率和工作负载特征等因素控制路由。
 
-### Go Types {#go-types}
+### Go 类型 {#go-types}
 
 ```go
-// InferenceServiceSpec defines the desired state of InferenceService
+// InferenceServiceSpec 定义 InferenceService 的期望状态
 type InferenceServiceSpec struct {
-    // Roles defines the components of the inference service
+    // Roles 定义推理服务的组件
     Roles []RoleSpec `json:"roles"`
 }
 
-// Role defines a component in the inference pipeline
+// Role 定义推理流水线中的一个组件
 type RoleSpec struct {
-    // Name is the identifier for this role
+    // Name 是此角色的标识符
     Name string `json:"name"`
     
-    // ComponentType specifies the type of component
+    // ComponentType 指定组件类型
     // +kubebuilder:validation:Enum=router;prefiller;decoder;worker
     ComponentType ComponentType `json:"componentType"`
     
-    // Router-specific fields (only for componentType: router)
+    // Router 特有字段（仅用于 componentType: router）
     Strategy              RoutingStrategy        `json:"strategy,omitempty"`
     HTTPRoute             *runtime.RawExtension  `json:"httproute,omitempty"`   // Gateway API HTTPRouteSpec
-    Gateway               *runtime.RawExtension  `json:"gateway,omitempty"`     // Reserved; the controller does not reconcile Gateway resources
-    EndpointPickerConfig  string                 `json:"endpointPickerConfig,omitempty"`  // Raw YAML for advanced users
+    Gateway               *runtime.RawExtension  `json:"gateway,omitempty"`     // 预留；控制器不调和 Gateway 资源
+    EndpointPickerConfig  string                 `json:"endpointPickerConfig,omitempty"`  // 面向高级用户的原始 YAML
     
-    // Worker-specific fields (for prefiller/decoder/worker)
+    // Worker 特有字段（用于 prefiller/decoder/worker）
     Replicas       *int32                 `json:"replicas,omitempty"`
     Template       *runtime.RawExtension  `json:"template,omitempty"`  // corev1.PodTemplateSpec
 }
 
-// ComponentType defines the type of component
+// ComponentType 定义组件类型
 type ComponentType string
 
 const (
@@ -196,7 +196,7 @@ const (
     ComponentTypeWorker    ComponentType = "worker"
 )
 
-// RoutingStrategy defines the inference routing strategy
+// RoutingStrategy 定义推理路由策略
 type RoutingStrategy string
 
 const (
@@ -208,9 +208,9 @@ const (
 )
 ```
 
-### Configuration Examples {#configuration-examples}
+### 配置示例 {#configuration-examples}
 
-#### Example 1: Simple Strategy-based Configuration {#example-1-simple-strategy-based-configuration}
+#### 示例 1：基于简单策略的配置 {#example-1-simple-strategy-based-configuration}
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -240,10 +240,10 @@ spec:
             - --model=meta-llama/Llama-3-8B-Instruct
 ```
 
-FusionInfer automatically generates the following resources:
+FusionInfer 会自动生成以下资源：
 
 ```yaml
-# 1. HTTPRoute - Routes traffic to the InferencePool
+# 1. HTTPRoute - 将流量路由到 InferencePool
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -261,7 +261,7 @@ spec:
       name: my-service-pool
 
 ---
-# 2. InferencePool - Manages the inference backend pods
+# 2. InferencePool - 管理推理后端 Pod
 apiVersion: inference.networking.k8s.io/v1
 kind: InferencePool
 metadata:
@@ -279,7 +279,7 @@ spec:
       number: 9002
 
 ---
-# 3. EndpointPickerConfig (ConfigMap) - EPP scheduling configuration
+# 3. EndpointPickerConfig (ConfigMap) - EPP 调度配置
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -303,7 +303,7 @@ data:
         weight: 100
 
 ---
-# 4. EPP Deployment - Endpoint Picker deployment
+# 4. EPP Deployment - Endpoint Picker 部署
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -364,7 +364,7 @@ spec:
           name: my-service-epp-config
 
 ---
-# 5. EPP Service - Exposes the EPP for Envoy ext-proc
+# 5. EPP Service - 通过 Envoy ext-proc 暴露 EPP
 apiVersion: v1
 kind: Service
 metadata:
@@ -385,9 +385,9 @@ spec:
     protocol: TCP
 ```
 
-#### Example 2: Advanced Configuration with Custom EndpointPickerConfig {#example-2-advanced-configuration-with-custom-endpointpickerconfig}
+#### 示例 2：使用自定义 EndpointPickerConfig 的高级配置 {#example-2-advanced-configuration-with-custom-endpointpickerconfig}
 
-For advanced users with specific tuning requirements, FusionInfer allows direct configuration of the EndpointPickerConfig. This provides full control over scheduling behavior, plugin parameters, and scoring weights. 
+对于有特定调优需求的高级用户，FusionInfer 允许直接配置 EndpointPickerConfig。这样可以完全控制调度行为、插件参数和评分权重。
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -398,7 +398,7 @@ spec:
   roles:
     - name: gateway
       componentType: router
-      # Direct control over EPP configuration for advanced tuning
+      # 直接控制 EPP 配置以进行高级调优
       endpointPickerConfig: |
         apiVersion: inference.networking.x-k8s.io/v1alpha1
         kind: EndpointPickerConfig
@@ -436,9 +436,9 @@ spec:
             - --model=meta-llama/Llama-3-8B-Instruct
 ```
 
-#### Example 3: Disaggregated Prefill/Decode Architecture {#example-3-disaggregated-prefilldecode-architecture}
+#### 示例 3：分离式 Prefill/Decode 架构 {#example-3-disaggregated-prefilldecode-architecture}
 
-For large-scale LLM deployments, disaggregated prefill/decode architecture separates the compute-intensive prompt processing (prefill) phase from the memory-intensive token generation (decode) phase. This allows independent scaling and optimization of each phase:
+对于大规模 LLM 部署，分离式 Prefill/Decode 架构将计算密集型提示词处理（Prefill）阶段与内存密集型 token 生成（Decode）阶段分开。这样可以独立扩缩和优化每个阶段：
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -481,14 +481,14 @@ spec:
                 - --kv-transfer-config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
 ```
 
-**Generated Resources:**
+**生成的资源：**
 
-The FusionInfer Router Controller creates the following Gateway API and EPP resources for a disaggregated prefill/decode architecture. The Gateway referenced by the generated `HTTPRoute` must already exist.
+FusionInfer Router 控制器会为分离式 Prefill/Decode 架构创建以下 Gateway API 和 EPP 资源。生成的 `HTTPRoute` 所引用的 Gateway 必须已经存在。
 
-> **Note**: In a complete P/D deployment, decode pods typically include a sidecar for orchestrating communication with prefill pods. This sidecar deployment is managed by the workload component, not the gateway component.
+> **注意**：在完整的 P/D 部署中，Decode Pod 通常包含一个用于编排与 Prefill Pod 通信的 sidecar。该 sidecar 的部署由工作负载组件管理，而不是由 Gateway 组件管理。
 
 ```yaml
-# 1. InferencePool - Single pool managing both prefill and decode pods
+# 1. InferencePool - 管理 Prefill 和 Decode Pod 的单一池
 apiVersion: inference.networking.k8s.io/v1
 kind: InferencePool
 metadata:
@@ -506,7 +506,7 @@ spec:
   - number: 8000
 
 ---
-# 2. ConfigMap - P/D-aware Endpoint Picker configuration
+# 2. ConfigMap - P/D 感知的 Endpoint Picker 配置
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -553,7 +553,7 @@ data:
         weight: 50
 
 ---
-# 3. HTTPRoute - Routes traffic to the EPP
+# 3. HTTPRoute - 将流量路由到 EPP
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -575,7 +575,7 @@ spec:
       kind: InferencePool
 
 ---
-# 4. EPP Deployment and Service (automatically configured)
+# 4. EPP Deployment 和 Service（自动配置）
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -626,19 +626,19 @@ spec:
     port: 9090
 ```
 
-## Strategy to EndpointPickerConfig Mapping {#strategy-to-endpointpickerconfig-mapping}
+## 路由策略到 EndpointPickerConfig 的映射 {#strategy-to-endpointpickerconfig-mapping}
 
-FusionInfer automatically generates the appropriate EndpointPickerConfig based on the routing strategy:
+FusionInfer 会根据路由策略自动生成相应的 EndpointPickerConfig：
 
-| Routing Strategy | Generated Plugins | Use Case |
+| 路由策略 | 生成的插件 | 用例 |
 |-----------------|------------------|----------|
-| `prefix-cache` | • `prefix-cache-scorer` (with optimized parameters)<br/>• `max-score-picker`<br/>• Single `default` scheduling profile | Route requests with longest shared prefixes to same server while balancing with KV-cache utilization and queue depth |
-| `kv-cache-utilization` | • `kv-cache-utilization-scorer`<br/>• `max-score-picker`<br/>• Single `default` scheduling profile | Balance load based on memory usage across inference servers |
-| `queue-size` | • `queue-scorer`<br/>• `max-score-picker`<br/>• Single `default` scheduling profile | Minimize request waiting time by routing to least loaded servers |
-| `lora-affinity` | • `lora-affinity-scorer`<br/>• `max-score-picker`<br/>• Single `default` scheduling profile | Route requests to servers with matching LoRA adapters for multi-adapter serving |
-| `pd-disaggregation` | • `pd-profile-handler`<br/>• `prefill-header-handler`<br/>• `by-label` filters (for prefiller/decoder)<br/>• `prefix-cache-scorer`<br/>• `max-score-picker`<br/>• Two profiles: `prefill` and `decode` | Separate compute-intensive prefill from memory-intensive decode phases |
+| `prefix-cache` | • `prefix-cache-scorer`（使用优化参数）<br/>• `max-score-picker`<br/>• 单个 `default` 调度 Profile | 将具有最长共享前缀的请求路由到同一服务器，同时兼顾 KV cache 利用率和 queue size |
+| `kv-cache-utilization` | • `kv-cache-utilization-scorer`<br/>• `max-score-picker`<br/>• 单个 `default` 调度 Profile | 根据各推理服务器的内存使用情况均衡负载 |
+| `queue-size` | • `queue-scorer`<br/>• `max-score-picker`<br/>• 单个 `default` 调度 Profile | 将请求路由到负载最低的服务器，从而最大限度缩短请求等待时间 |
+| `lora-affinity` | • `lora-affinity-scorer`<br/>• `max-score-picker`<br/>• 单个 `default` 调度 Profile | 将请求路由到具有匹配 LoRA 适配器的服务器，以支持多适配器服务 |
+| `pd-disaggregation` | • `pd-profile-handler`<br/>• `prefill-header-handler`<br/>• `by-label` 过滤器（用于 prefiller/decoder）<br/>• `prefix-cache-scorer`<br/>• `max-score-picker`<br/>• 两个 Profile：`prefill` 和 `decode` | 将计算密集型 Prefill 阶段与内存密集型 Decode 阶段分离 |
 
-**prefix-cache:**
+**prefix-cache：**
 ```yaml
 plugins:
 - type: prefix-cache-scorer
@@ -655,7 +655,7 @@ schedulingProfiles:
     weight: 100
 ```
 
-**kv-cache-utilization:**
+**kv-cache-utilization：**
 ```yaml
 plugins:
 - type: kv-cache-utilization-scorer
@@ -668,7 +668,7 @@ schedulingProfiles:
     weight: 100
 ```
 
-**queue-size:**
+**queue-size：**
 ```yaml
 plugins:
 - type: queue-scorer
@@ -681,7 +681,7 @@ schedulingProfiles:
     weight: 100
 ```
 
-**lora-affinity:**
+**lora-affinity：**
 ```yaml
 plugins:
 - type: lora-affinity-scorer
@@ -694,7 +694,7 @@ schedulingProfiles:
     weight: 100
 ```
 
-**pd-disaggregation:**
+**pd-disaggregation：**
 ```yaml
 plugins:
 - type: pd-profile-handler
@@ -734,21 +734,21 @@ schedulingProfiles:
     weight: 50
 ```
 
-## Implementation Phases {#implementation-phases}
+## 实施阶段 {#implementation-phases}
 
-### Phase 1: Core Router Integration {#phase-1-core-router-integration}
+### 阶段 1：核心 Router 集成 {#phase-1-core-router-integration}
 
-The first phase focuses on establishing the fundamental router capabilities for standard inference workloads:
+第一阶段侧重于为标准推理工作负载建立基础 Router 能力：
 
-**Deliverables:**
-- Automatic generation of `InferencePool`, `HTTPRoute`, and the EPP workload and configuration resources
-- Support for basic routing strategies:
-  - `prefix-cache`: Route requests with shared prefixes to optimize cache utilization
-  - `kv-cache-utilization`: Balance load based on memory usage
-  - `queue-size`: Minimize request waiting time
-  - `lora-affinity`: Route to servers with matching LoRA adapters
-- Custom `endpointPickerConfig` support for advanced users
+**交付成果：**
+- 自动生成 `InferencePool`、`HTTPRoute`，以及 EPP 工作负载和配置资源
+- 支持基本路由策略：
+  - `prefix-cache`：将具有共享前缀的请求路由到同一服务器，以优化 prefix cache 利用率
+  - `kv-cache-utilization`：根据内存使用情况均衡负载
+  - `queue-size`：最大限度缩短请求等待时间
+  - `lora-affinity`：路由到具有匹配 LoRA 适配器的服务器
+- 为高级用户提供自定义 `endpointPickerConfig` 支持
 
-### Phase 2: Disaggregated Prefill/Decode Support {#phase-2-disaggregated-prefilldecode-support}
+### 阶段 2：分离式 Prefill/Decode 支持 {#phase-2-disaggregated-prefilldecode-support}
 
-The second phase adds support for advanced Disaggregated Prefill/Decode architectures that separate compute-intensive prefill from memory-intensive decode operations.
+第二阶段增加对高级分离式 Prefill/Decode 架构的支持，将计算密集型 Prefill 操作与内存密集型 Decode 操作分开。

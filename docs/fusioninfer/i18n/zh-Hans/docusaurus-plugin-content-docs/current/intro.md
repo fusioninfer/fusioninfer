@@ -1,28 +1,28 @@
 ---
 sidebar_position: 1
 slug: /intro
-description: FusionInfer is a Kubernetes-native platform for deploying, orchestrating, and routing LLM inference workloads.
+description: FusionInfer 是一个用于部署、编排和路由 LLM 推理工作负载的 Kubernetes 原生平台。
 ---
 
 # FusionInfer {#fusioninfer}
 
-A Kubernetes controller for unified LLM inference orchestration, supporting both monolithic and prefill/decode (PD) disaggregated serving topologies.
+FusionInfer 是用于统一编排 LLM 推理的 Kubernetes 控制器，同时支持一体式与 Prefill/Decode（PD）分离式服务拓扑。
 
-## Description {#description}
+## 说明 {#description}
 
-FusionInfer provides a single `InferenceService` CRD that enables:
+FusionInfer 提供统一的 `InferenceService` CRD，支持：
 
-- **Monolithic deployment**: Single-pod inference handling full request lifecycle
-- **PD disaggregated deployment**: Separate prefill and decode roles for better GPU utilization
-- **Multi-node deployment**: Distributed inference across multiple nodes using tensor parallelism
-- **Gang scheduling**: Atomic scheduling via Volcano PodGroup integration
-- **Intelligent routing**: Gateway API integration with EPP (Endpoint Picker) for request scheduling
+- **一体式部署**：由单个 Pod 执行推理并处理请求的完整生命周期
+- **PD 分离式部署**：将 Prefill 和 Decode 拆分为独立角色，提高 GPU 利用率
+- **多节点部署**：通过张量并行跨多个节点执行分布式推理
+- **Gang 调度**：集成 Volcano PodGroup，实现原子调度
+- **智能路由**：集成 Gateway API，并使用 EPP（Endpoint Picker）进行请求调度
 
-## Demo {#demo}
+## 演示 {#demo}
 
-Watch the [prefix-cache-aware routing demo](https://github.com/user-attachments/assets/1743bf67-2abd-42cd-a0f3-d7b65281f8cb).
+观看[前缀缓存感知路由演示](https://github.com/user-attachments/assets/1743bf67-2abd-42cd-a0f3-d7b65281f8cb)。
 
-## Architecture {#architecture}
+## 架构 {#architecture}
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -31,94 +31,94 @@ Watch the [prefix-cache-aware routing demo](https://github.com/user-attachments/
 └─────────────────────────────────┬───────────────────────────────┘
                                   │
                     ┌───────────────────────────────┐
-                    │   InferenceService Controller │
+                    │      InferenceService 控制器   │
                     └─────────────┬─────────────────┘
                                   │
         ┌─────────────────────────┼─────────────────────────┐
         │                         │                         │
         ▼                         ▼                         ▼
 ┌───────────────┐       ┌─────────────────┐       ┌─────────────────┐
-│   PodGroup    │       │ LeaderWorkerSet │       │  Router (EPP)   │
+│   PodGroup    │       │ LeaderWorkerSet │       │   路由器 (EPP)   │
 │  (Volcano)    │       │     (LWS)       │       │  InferencePool  │
 │               │       │                 │       │  HTTPRoute      │
 └───────────────┘       └─────────────────┘       └─────────────────┘
 ```
 
-## Getting Started {#getting-started}
+## 入门 {#getting-started}
 
-### Install Dependencies {#install-dependencies}
+### 安装依赖项 {#install-dependencies}
 
-FusionInfer requires the following components:
+FusionInfer 需要以下组件：
 
-**1. LeaderWorkerSet (LWS)** - For multi-node workload management
+**1. LeaderWorkerSet (LWS)** - 用于管理多节点工作负载
 
 ```bash
 kubectl create -f https://github.com/kubernetes-sigs/lws/releases/download/v0.7.0/manifests.yaml
 ```
 
-Reference: [LWS Installation Guide](https://lws.sigs.k8s.io/docs/installation/) | [Releases](https://github.com/kubernetes-sigs/lws/releases)
+参考：[LWS 安装指南](https://lws.sigs.k8s.io/docs/installation/) | [版本发布](https://github.com/kubernetes-sigs/lws/releases)
 
-**2. Volcano** - For gang scheduling
+**2. Volcano** - 用于 Gang 调度
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.13.1/installer/volcano-development.yaml
 ```
 
-Reference: [Volcano Installation Guide](https://volcano.sh/en/docs/installation/) | [Releases](https://github.com/volcano-sh/volcano/releases)
+参考：[Volcano 安装指南](https://volcano.sh/en/docs/installation/) | [版本发布](https://github.com/volcano-sh/volcano/releases)
 
-**3. Gateway API** - For service routing
+**3. Gateway API** - 用于服务路由
 
 ```bash
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.1/standard-install.yaml
 ```
 
-Reference: [Gateway API Installation Guide](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) | [Releases](https://github.com/kubernetes-sigs/gateway-api/releases)
+参考：[Gateway API 安装指南](https://gateway-api.sigs.k8s.io/guides/#installing-gateway-api) | [版本发布](https://github.com/kubernetes-sigs/gateway-api/releases)
 
-**4. Gateway API Inference Extension** - For intelligent inference request routing
+**4. Gateway API Inference Extension** - 用于智能路由推理请求
 
 ```bash
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.2.1/manifests.yaml
 ```
 
-Reference: [Inference Extension Docs](https://gateway-api-inference-extension.sigs.k8s.io/) | [Releases](https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases)
+参考：[Inference Extension 文档](https://gateway-api-inference-extension.sigs.k8s.io/) | [版本发布](https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases)
 
-### Install the Gateway {#install-the-gateway}
+### 安装 Gateway {#install-the-gateway}
 
-Set the Kgateway version and install the Kgateway CRDs:
+设置 Kgateway 版本并安装 Kgateway CRD：
 
 ```bash
 KGTW_VERSION=v2.1.0
 helm upgrade -i --create-namespace --namespace kgateway-system --version $KGTW_VERSION kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
 ```
 
-Install Kgateway:
+安装 Kgateway：
 
 ```bash
 helm upgrade -i --namespace kgateway-system --version $KGTW_VERSION kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway --set inferenceExtension.enabled=true
 ```
 
-Deploy the Inference Gateway:
+部署 Inference Gateway：
 
 ```bash
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/raw/main/config/manifests/gateway/kgateway/gateway.yaml
 ```
 
-### Quick Start (Local Development) {#quick-start-local-development}
+### 快速开始（本地开发） {#quick-start-local-development}
 
 ```bash
-# 1. Create a kind cluster (optional)
+# 1. 创建 kind 集群（可选）
 kind create cluster --name fusioninfer
 
-# 2. Install FusionInfer CRDs
+# 2. 安装 FusionInfer CRD
 make install
 
-# 3. Run the controller locally
+# 3. 在本地运行控制器
 make run
 ```
 
-## Usage Examples {#usage-examples}
+## 使用示例 {#usage-examples}
 
-### Monolithic LLM Service {#monolithic-llm-service}
+### 一体式 LLM 服务 {#monolithic-llm-service}
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -147,10 +147,10 @@ spec:
                   nvidia.com/gpu: "1"
 ```
 
-## Send Request {#send-request}
+## 发送请求 {#send-request}
 
 ```bash
-# You can use minikube tunnel to assign IP address to an LoadBalancer Type Service
+# 可使用 minikube tunnel 为 LoadBalancer 类型的 Service 分配 IP 地址
 GATEWAY_IP=$(kubectl get gateway inference-gateway -o jsonpath='{.status.addresses[0].value}')
 
 curl -X POST "http://${GATEWAY_IP}/v1/chat/completions" \
@@ -158,7 +158,7 @@ curl -X POST "http://${GATEWAY_IP}/v1/chat/completions" \
   -d '{
     "model": "Qwen/Qwen3-8B",
     "messages": [
-      {"role": "user", "content": "Hello, how are you?"}
+      {"role": "user", "content": "你好，最近怎么样？"}
     ]
   }'
 ```

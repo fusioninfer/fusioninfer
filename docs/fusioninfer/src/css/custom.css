@@ -234,11 +234,6 @@ summary,
   margin-left: auto;
 }
 
-.navbar__items--right > [class*='navbarSearchContainer'],
-.navbar__search {
-  display: none;
-}
-
 .navbar-sidebar {
   background: var(--fi-page-background);
 }

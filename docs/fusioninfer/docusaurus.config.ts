@@ -2,6 +2,8 @@ import { themes as prismThemes } from 'prism-react-renderer';
 import type { Config } from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 
+const docsEditUrl = 'https://github.com/fusioninfer/fusioninfer/edit/main/docs/fusioninfer/';
+
 const config: Config = {
   title: 'FusionInfer',
   tagline: 'A Kubernetes-native platform for distributed LLM inference orchestration',
@@ -24,8 +26,20 @@ const config: Config = {
   trailingSlash: false,
 
   i18n: {
+    path: 'i18n',
     defaultLocale: 'en',
-    locales: ['en'],
+    locales: ['en', 'zh'],
+    localeConfigs: {
+      en: {
+        label: 'English',
+        htmlLang: 'en',
+      },
+      zh: {
+        path: 'zh-Hans',
+        label: '简体中文',
+        htmlLang: 'zh-CN',
+      },
+    },
   },
 
   markdown: {
@@ -42,14 +56,16 @@ const config: Config = {
       {
         docs: {
           sidebarPath: './sidebars.ts',
-          editUrl: 'https://github.com/fusioninfer/fusioninfer/tree/main/docs/fusioninfer/',
+          editUrl: docsEditUrl,
+          editLocalizedFiles: true,
         },
         blog: {
           routeBasePath: 'blog',
           showReadingTime: true,
           blogSidebarTitle: 'All posts',
           blogSidebarCount: 'ALL',
-          editUrl: 'https://github.com/fusioninfer/fusioninfer/tree/main/docs/fusioninfer/',
+          editUrl: docsEditUrl,
+          editLocalizedFiles: true,
         },
         theme: {
           customCss: './src/css/custom.css',
@@ -64,10 +80,18 @@ const config: Config = {
       '@easyops-cn/docusaurus-search-local',
       {
         hashed: 'filename',
-        language: ['en'],
+        language: ['en', 'zh'],
         indexDocs: true,
         indexBlog: true,
         indexPages: false,
+        docsDir: [
+          'docs',
+          'i18n/zh-Hans/docusaurus-plugin-content-docs/current',
+        ],
+        blogDir: [
+          'blog',
+          'i18n/zh-Hans/docusaurus-plugin-content-blog',
+        ],
         docsRouteBasePath: '/docs',
         blogRouteBasePath: '/blog',
         highlightSearchTermsOnTargetPage: true,
@@ -107,6 +131,10 @@ const config: Config = {
           label: 'Blogs',
           position: 'right',
         },
+        {
+          type: 'localeDropdown',
+          position: 'right',
+        },
       ],
     },
     footer: {
@@ -124,8 +152,8 @@ const config: Config = {
               to: '/docs/user-guide/deployment',
             },
             {
-              label: 'Architecture',
-              to: '/docs/design/core-design',
+              label: 'Design',
+              to: '/docs/design/model-serving',
             },
           ],
         },
