@@ -4,4 +4,6 @@ resources:
 - v1alpha1_modelloader.yaml
 - v1alpha1_model.yaml
 - v1alpha1_clustermodel.yaml
+- v1alpha1_runtimeprofile.yaml
+- v1alpha1_clusterruntimeprofile.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

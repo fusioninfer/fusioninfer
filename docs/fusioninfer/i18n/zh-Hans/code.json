@@ -466,7 +466,7 @@
     "description": "Single-node detail for the monolithic serving use case"
   },
   "homepage.useCases.monolithic.details.openAi": {
-    "message": "兼容 OpenAI 的引擎",
+    "message": "兼容 OpenAI 的推理引擎",
     "description": "Engine compatibility detail for the monolithic serving use case"
   },
   "homepage.useCases.disaggregated.eyebrow": {

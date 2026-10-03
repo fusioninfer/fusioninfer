@@ -28,8 +28,10 @@ import (
 type FusioninferV1alpha1Interface interface {
 	RESTClient() rest.Interface
 	ClusterModelsGetter
+	ClusterRuntimeProfilesGetter
 	InferenceServicesGetter
 	ModelsGetter
+	RuntimeProfilesGetter
 }
 
 // FusioninferV1alpha1Client is used to interact with features provided by the fusioninfer.io group.
@@ -41,12 +43,20 @@ func (c *FusioninferV1alpha1Client) ClusterModels() ClusterModelInterface {
 	return newClusterModels(c)
 }
 
+func (c *FusioninferV1alpha1Client) ClusterRuntimeProfiles() ClusterRuntimeProfileInterface {
+	return newClusterRuntimeProfiles(c)
+}
+
 func (c *FusioninferV1alpha1Client) InferenceServices(namespace string) InferenceServiceInterface {
 	return newInferenceServices(c, namespace)
 }
 
 func (c *FusioninferV1alpha1Client) Models(namespace string) ModelInterface {
 	return newModels(c, namespace)
+}
+
+func (c *FusioninferV1alpha1Client) RuntimeProfiles(namespace string) RuntimeProfileInterface {
+	return newRuntimeProfiles(c, namespace)
 }
 
 // NewForConfig creates a new FusioninferV1alpha1Client for the given config.

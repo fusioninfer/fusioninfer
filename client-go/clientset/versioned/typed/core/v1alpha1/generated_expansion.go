@@ -19,6 +19,10 @@ package v1alpha1
 
 type ClusterModelExpansion interface{}
 
+type ClusterRuntimeProfileExpansion interface{}
+
 type InferenceServiceExpansion interface{}
 
 type ModelExpansion interface{}
+
+type RuntimeProfileExpansion interface{}

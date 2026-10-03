@@ -17,12 +17,10 @@ limitations under the License.
 package cel
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"testing"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -106,42 +104,6 @@ func loraSpec(kind, name string) fusioninferiov1alpha1.ModelSpec {
 	return spec
 }
 
-// createModel creates object, fails the test if the API server rejects it, and deletes it when
-// the test ends.
-func createModel(t *testing.T, object client.Object) {
-	t.Helper()
-	if err := k8sClient.Create(t.Context(), object); err != nil {
-		t.Fatalf("create %T %q: %v", object, object.GetName(), err)
-	}
-	// t.Context is canceled before cleanups run, so delete with a fresh context.
-	t.Cleanup(func() {
-		_ = k8sClient.Delete(context.Background(), object)
-	})
-}
-
-// updateModel reads the stored object of the given kind and name, applies mutate, and writes it
-// back. It reads into a new object because decoding does not clear fields that the stored copy lacks.
-func updateModel(ctx context.Context, kind, name string, mutate func(client.Object)) error {
-	latest := modelObject(kind, name, fusioninferiov1alpha1.ModelSpec{})
-	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(latest), latest); err != nil {
-		return err
-	}
-	mutate(latest)
-	return k8sClient.Update(ctx, latest)
-}
-
-// expectInvalid checks that the API server rejected the request as Invalid and mentioned message.
-func expectInvalid(t *testing.T, err error, message string) {
-	t.Helper()
-	if !apierrors.IsInvalid(err) {
-		t.Errorf("expected an Invalid error, got %v", err)
-		return
-	}
-	if !strings.Contains(err.Error(), message) {
-		t.Errorf("expected the error to contain %q, got %v", message, err)
-	}
-}
-
 // TestModelAcceptsSupportedSourceURIs checks that valid hf, s3 and oci URIs are accepted.
 func TestModelAcceptsSupportedSourceURIs(t *testing.T) {
 	t.Parallel()
@@ -164,7 +126,7 @@ func TestModelAcceptsSupportedSourceURIs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
 			t.Parallel()
-			createModel(t, modelObject("Model", tt.name, sourceSpec(tt.uri)))
+			createObject(t, modelObject("Model", tt.name, sourceSpec(tt.uri)))
 		})
 	}
 }
@@ -230,7 +192,7 @@ func TestModelAcceptsCredentialsAndPrefetch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
 			t.Parallel()
-			createModel(t, modelObject("Model", tt.name, tt.spec))
+			createObject(t, modelObject("Model", tt.name, tt.spec))
 		})
 	}
 }
@@ -279,7 +241,7 @@ func TestModelAcceptsNamespacedLoRAReferences(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
 			t.Parallel()
-			createModel(t, modelObject("Model", tt.name, loraSpec(tt.kind, "qwen3-8b")))
+			createObject(t, modelObject("Model", tt.name, loraSpec(tt.kind, "qwen3-8b")))
 		})
 	}
 }
@@ -287,7 +249,7 @@ func TestModelAcceptsNamespacedLoRAReferences(t *testing.T) {
 // TestClusterModelLoRAMustReferenceClusterModel checks that a cluster-scoped LoRA can only reference a ClusterModel.
 func TestClusterModelLoRAMustReferenceClusterModel(t *testing.T) {
 	t.Parallel()
-	createModel(t, modelObject("ClusterModel", "cluster-lora-cluster-ref", loraSpec("ClusterModel", "qwen3-8b")))
+	createObject(t, modelObject("ClusterModel", "cluster-lora-cluster-ref", loraSpec("ClusterModel", "qwen3-8b")))
 
 	object := modelObject("ClusterModel", "cluster-lora-model-ref", loraSpec("Model", "qwen3-8b"))
 	expectInvalid(t, k8sClient.Create(t.Context(), object), "cluster-scoped LoRA artifacts must reference a ClusterModel")
@@ -303,9 +265,9 @@ func TestModelUpdatesKeepURIAndLoRAImmutable(t *testing.T) {
 			ctx := t.Context()
 			suffix := strings.ToLower(kind)
 			base := "update-base-" + suffix
-			createModel(t, modelObject(kind, base, sourceSpec(hfModelURI)))
+			createObject(t, modelObject(kind, base, sourceSpec(hfModelURI)))
 			adapter := "update-lora-" + suffix
-			createModel(t, modelObject(kind, adapter, loraSpec("ClusterModel", "qwen3-8b")))
+			createObject(t, modelObject(kind, adapter, loraSpec("ClusterModel", "qwen3-8b")))
 
 			// Updates that must succeed, applied to base in order.
 			allowed := []struct {
@@ -324,7 +286,8 @@ func TestModelUpdatesKeepURIAndLoRAImmutable(t *testing.T) {
 				{"prefetch removal", func(object client.Object) { specOf(object).Prefetch = nil }},
 			}
 			for _, update := range allowed {
-				if err := updateModel(ctx, kind, base, update.mutate); err != nil {
+				latest := modelObject(kind, base, fusioninferiov1alpha1.ModelSpec{})
+				if err := updateObject(ctx, latest, update.mutate); err != nil {
 					t.Errorf("update %s: %v", update.desc, err)
 				}
 			}
@@ -343,7 +306,8 @@ func TestModelUpdatesKeepURIAndLoRAImmutable(t *testing.T) {
 				{adapter, func(object client.Object) { specOf(object).LoRA = nil }, "lora cannot be added or removed"},
 			}
 			for _, update := range rejected {
-				expectInvalid(t, updateModel(ctx, kind, update.name, update.mutate), update.message)
+				latest := modelObject(kind, update.name, fusioninferiov1alpha1.ModelSpec{})
+				expectInvalid(t, updateObject(ctx, latest, update.mutate), update.message)
 			}
 		})
 	}

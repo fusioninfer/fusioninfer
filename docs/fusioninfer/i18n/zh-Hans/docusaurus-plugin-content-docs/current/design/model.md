@@ -1,20 +1,20 @@
 ---
 title: Model 与 ClusterModel
-description: 定义命名空间级或集群级的不可变模型制品，以及可选的 LoRA 适配器绑定。
+description: 定义命名空间级或集群级的模型制品，以及可选的 LoRA 适配器绑定。
 ---
 
 ## 概述 {#overview}
 
-`Model` 和 `ClusterModel` 声明模型制品的来源及其版本标识：
+`Model` 和 `ClusterModel` 声明模型制品的来源：
 
 - `Model` 是 Namespaced 资源，用于 Namespace 内的模型。
 - `ClusterModel` 是 Cluster-scoped 资源，用于跨 Namespace 共享的模型。
 
-两个 Kind 使用相同的 `ModelSpec`。只有 `spec.source` 表示 Base Model；同时设置 `spec.source` 和 `spec.lora.baseModelRef` 表示 LoRA 制品。
+`Model` 和 `ClusterModel` 使用相同的 `ModelSpec`。只有 `spec.source` 表示 Base Model；同时设置 `spec.source` 和 `spec.lora.baseModelRef` 表示 LoRA 制品。
 
 模型文件由 FusionInfer 在每个节点上运行的 model agent 下载到节点缓存，下载时机见[预先下载](#prefetch)。
 
-下面是一个最小的 Namespaced Base Model：
+下面是一个 `Model` 资源的示例：
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1

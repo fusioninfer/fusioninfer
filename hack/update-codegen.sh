@@ -35,6 +35,7 @@ kube::codegen::gen_helpers "${REPO_ROOT}/api" \
 kube::codegen::gen_client "${REPO_ROOT}/api" \
     --with-watch \
     --with-applyconfig \
+    --applyconfig-externals "k8s.io/api/core/v1.PodTemplateSpec:k8s.io/client-go/applyconfigurations/core/v1" \
     --output-dir "${REPO_ROOT}/client-go" \
     --output-pkg github.com/fusioninfer/fusioninfer/client-go \
     --boilerplate "${REPO_ROOT}/hack/boilerplate.go.txt"

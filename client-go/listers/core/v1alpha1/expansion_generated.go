@@ -21,6 +21,10 @@ package v1alpha1
 // ClusterModelLister.
 type ClusterModelListerExpansion interface{}
 
+// ClusterRuntimeProfileListerExpansion allows custom methods to be added to
+// ClusterRuntimeProfileLister.
+type ClusterRuntimeProfileListerExpansion interface{}
+
 // InferenceServiceListerExpansion allows custom methods to be added to
 // InferenceServiceLister.
 type InferenceServiceListerExpansion interface{}
@@ -36,3 +40,11 @@ type ModelListerExpansion interface{}
 // ModelNamespaceListerExpansion allows custom methods to be added to
 // ModelNamespaceLister.
 type ModelNamespaceListerExpansion interface{}
+
+// RuntimeProfileListerExpansion allows custom methods to be added to
+// RuntimeProfileLister.
+type RuntimeProfileListerExpansion interface{}
+
+// RuntimeProfileNamespaceListerExpansion allows custom methods to be added to
+// RuntimeProfileNamespaceLister.
+type RuntimeProfileNamespaceListerExpansion interface{}

@@ -34,4 +34,10 @@ resources:
 - clustermodel_admin_role.yaml
 - clustermodel_editor_role.yaml
 - clustermodel_viewer_role.yaml
+- runtimeprofile_admin_role.yaml
+- runtimeprofile_editor_role.yaml
+- runtimeprofile_viewer_role.yaml
+- clusterruntimeprofile_admin_role.yaml
+- clusterruntimeprofile_editor_role.yaml
+- clusterruntimeprofile_viewer_role.yaml
 

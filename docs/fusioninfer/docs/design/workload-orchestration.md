@@ -16,7 +16,7 @@ InferenceDeployment uses `replicas.<role>` to control how many replicas run for 
 
 RuntimeProfile defines how each logical replica runs:
 
-- `podTemplate` defines the image, resources, and engine parameters for the Pods in the replica.
+- `podTemplate` defines the image, resources, and inference engine parameters for the Pods in the replica.
 - `multinode.nodeCount` defines how many Pods the replica contains.
   - When `multinode` is not set, `nodeCount` is treated as 1.
   - With `nodeCount: 4`, one replica contains one Leader and three Workers.
@@ -40,7 +40,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --tensor-parallel-size
               - "8"
               - --pipeline-parallel-size
@@ -126,7 +126,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --port
               - "8000"
               - --tensor-parallel-size
@@ -256,7 +256,7 @@ spec:
               - vllm
               - serve
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --tensor-parallel-size
               - "8"
               - --pipeline-parallel-size
@@ -289,7 +289,7 @@ spec:
               - vllm
               - serve
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --tensor-parallel-size
               - "8"
               - --pipeline-parallel-size
@@ -325,6 +325,8 @@ Volcano recognizes these as two four-Pod subgroups. A single-node Aggregated dep
 
 A Prefill/Decode Profile contains both `prefiller` and `decoder`. The Controller generates one DisaggregatedSet for the entire P/D revision; each role maps to a LeaderWorkerSet managed by the DisaggregatedSet. The two roles can have different Pod templates, logical replica counts, and `nodeCount` values. The DisaggregatedSet owns the unified revision, coordinated rollout, role status, and Headless Service.
 
+When the backend is vLLM and `kvTransfer.connector` is `nixl`, the Controller injects `VLLM_NIXL_SIDE_CHANNEL_HOST`, set to the Pod IP, into every Prefiller and Decoder Pod. NixlConnector uses `localhost` for the handshake by default, and across Pods the Decoder needs this address to reach the Prefiller.
+
 This mapping requires LeaderWorkerSet v0.9.0 or later, including the `disaggregatedset.x-k8s.io/v1` CRD, to be installed in the cluster. The Controller discovers this API at startup. If it is missing, the P/D InferenceDeployment sets `WorkloadsReady=False` with reason `DisaggregatedSetUnavailable`.
 
 The following configuration assigns two nodes to each Prefiller replica and four nodes to each Decoder replica. The InferenceDeployment requests one Prefiller replica and two Decoder replicas:
@@ -336,6 +338,8 @@ metadata:
   name: vllm-pd-2x4-h100-r1
 spec:
   backend: vllm
+  kvTransfer:
+    connector: nixl
   prefiller:
     multinode:
       nodeCount: 2
@@ -345,7 +349,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --port
               - "8000"
               - --tensor-parallel-size
@@ -353,7 +357,7 @@ spec:
               - --data-parallel-size
               - "1"
               - --kv-transfer-config
-              - '{"kv_connector":"NixlConnector","kv_role":"kv_producer"}'
+              - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
             ports:
               - name: http
                 containerPort: 8000
@@ -371,7 +375,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --port
               - "8000"
               - --tensor-parallel-size
@@ -381,7 +385,7 @@ spec:
               - --data-parallel-size
               - "1"
               - --kv-transfer-config
-              - '{"kv_connector":"NixlConnector","kv_role":"kv_consumer"}'
+              - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
             ports:
               - name: http
                 containerPort: 8000
@@ -579,11 +583,11 @@ LWS_WORKER_INDEX     Index of the Worker in the current group
 LWS_GROUP_SIZE       Total number of Pods in the current group
 ```
 
-The backend adapter translates these values into engine-specific executor, address, rank, and node-count arguments. RuntimeProfile cannot declare adapter-managed executor, address, rank, `nnodes`, or headless arguments; if a conflict occurs, the Controller rejects workload generation.
+The backend adapter translates these values into the executor, address, rank, and node-count arguments of the corresponding inference engine. RuntimeProfile cannot declare adapter-managed executor, address, rank, `nnodes`, or headless arguments; if a conflict occurs, the Controller rejects workload generation.
 
 ### vLLM {#vllm}
 
-Multinode vLLM always uses the native multiprocessing executor. RuntimeProfile declares only the model and engine parameters such as TP/PP/DP; the backend adapter injects `--distributed-executor-backend mp` and the in-group startup arguments into each Pod.
+Multinode vLLM always uses the native multiprocessing executor. RuntimeProfile declares only the model and inference engine parameters such as TP/PP/DP; the backend adapter injects `--distributed-executor-backend mp` and the in-group startup arguments into each Pod.
 
 Every Pod runs `vllm serve`. The Leader uses:
 
@@ -616,7 +620,7 @@ The Leader uses:
 
 ```bash
 python3 -m sglang.launch_server \
-  --model-path "${FUSION_MODEL_PATH}" \
+  --model-path "${FUSIONINFER_MODEL_PATH}" \
   --tp-size 16 \
   --dp-size 1 \
   --dist-init-addr "${LWS_LEADER_ADDRESS}:29500" \
@@ -624,11 +628,11 @@ python3 -m sglang.launch_server \
   --node-rank 0
 ```
 
-Each Worker uses the same engine parameters, with only the rank substituted:
+Each Worker uses the same inference engine parameters, with only the rank substituted:
 
 ```bash
 python3 -m sglang.launch_server \
-  --model-path "${FUSION_MODEL_PATH}" \
+  --model-path "${FUSIONINFER_MODEL_PATH}" \
   --tp-size 16 \
   --dp-size 1 \
   --dist-init-addr "${LWS_LEADER_ADDRESS}:29500" \
@@ -642,7 +646,7 @@ Only rank 0 serves HTTP. The other ranks run the SGLang scheduler and distribute
 
 RuntimeProfile owns the model parameters, TP/PP/DP, image, and per-Pod resources. The backend adapter selects the multiprocessing executor for vLLM and adds the address, rank, node count, and headless arguments that vary between Leaders and Workers; LWS provides the in-group address and index.
 
-The adapter accepts only entry-point forms explicitly supported by the Operator version, such as `vllm serve` and `python3 -m sglang.launch_server`. It can recognize a limited, version-constrained set of arguments, but it does not parse arbitrary shell scripts or validate the mathematical compatibility of the model architecture with TP/PP/DP. An unrecognized entry point, duplicate reserved arguments, or an unsupported argument combination leaves the new workload uncreated.
+The adapter accepts only entry-point forms explicitly supported by the current FusionInfer version, such as `vllm serve` and `python3 -m sglang.launch_server`. It can recognize a limited, version-constrained set of arguments, but it does not parse arbitrary shell scripts or validate the mathematical compatibility of the model architecture with TP/PP/DP. An unrecognized entry point, duplicate reserved arguments, or an unsupported argument combination leaves the new workload uncreated.
 
 ## Gang Scheduling {#gang-scheduling}
 
@@ -682,13 +686,13 @@ Two four-node Aggregated replicas correspond to `minMember: 8`, `subGroupSize: 4
 
 The shared PodGroup's `minMember` covers every desired member of the pending revision, so the revision does not support scheduling only part of the desired capacity. When resources are insufficient, the new LWS remains Pending and the previous active revision continues to receive traffic. This behavior matches the promotion condition that a revision is promoted only after all desired logical replicas are Ready.
 
-The Controller sets each generated Pod's `schedulerName` to the Volcano scheduler configured for the Operator. `schedulerName` in the RuntimeProfile must be unset or match that value; a conflicting value is rejected rather than silently overwritten.
+The Controller sets each generated Pod's `schedulerName` to the Volcano scheduler configured for FusionInfer. `schedulerName` in the RuntimeProfile must be unset or match that value; a conflicting value is rejected rather than silently overwritten.
 
-`SubGroupPolicy` requires Volcano v1.14 or later. At startup, the Operator must discover whether the PodGroup CRD includes `spec.subGroupPolicy`. If that capability is missing, the InferenceDeployment sets `WorkloadsReady=False` with reason `UnsupportedVolcanoVersion`; it cannot silently degrade to scheduling with only `minMember`.
+`SubGroupPolicy` requires Volcano v1.14 or later. At startup, the Controller must discover whether the PodGroup CRD includes `spec.subGroupPolicy`. If that capability is missing, the InferenceDeployment sets `WorkloadsReady=False` with reason `UnsupportedVolcanoVersion`; it cannot silently degrade to scheduling with only `minMember`.
 
 ## Scaling {#scaling}
 
-Changing only `replicas` in the InferenceDeployment does not change the node count, Pod resources, or engine parameters in the RuntimeProfile:
+Changing only `replicas` in the InferenceDeployment does not change the node count, Pod resources, or inference engine parameters in the RuntimeProfile:
 
 - Scaling Aggregated replicas updates `spec.replicas` on the standalone LWS.
 - Scaling P/D replicas updates `spec.replicas` on the corresponding DisaggregatedSet role, after which the DisaggregatedSet drives the child LWS.
@@ -709,7 +713,7 @@ With `loadingMode: preload`, the resolved LoRA references, digests, and `servedN
 The new revision is promoted only when all of the following conditions are met:
 
 - The required model copies have been materialized.
-- In preload mode, all LoRAs have been materialized and started successfully with the engine.
+- In preload mode, all LoRAs have been materialized and started successfully with the inference engine.
 - The Leader and all Workers in every logical replica are Ready.
 - All desired Aggregated or Prefill/Decode logical replicas are Ready.
 - The role Services have produced Ready Endpoints.

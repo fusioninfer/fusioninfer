@@ -320,7 +320,7 @@ const useCases = [
       }),
       translate({
         id: 'homepage.useCases.monolithic.details.openAi',
-        message: 'OpenAI-compatible engines',
+        message: 'OpenAI-compatible inference engines',
         description: 'Engine compatibility detail for the monolithic serving use case',
       }),
     ],

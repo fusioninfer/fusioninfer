@@ -81,7 +81,7 @@ Advanced users can also provide an `EndpointPickerConfig` when a predefined stra
 
 ## A platform, not an inference engine {#a-platform-not-an-inference-engine}
 
-FusionInfer does not implement model execution. Engines such as vLLM continue to run in the workload containers. FusionInfer focuses on the Kubernetes control plane around those engines, and its current scope is LLM inference rather than general-purpose machine learning workloads.
+FusionInfer does not implement model execution. Inference engines such as vLLM continue to run in the workload containers. FusionInfer focuses on the Kubernetes control plane around those inference engines, and its current scope is LLM inference rather than general-purpose machine learning workloads.
 
 ## Start exploring {#start-exploring}
 

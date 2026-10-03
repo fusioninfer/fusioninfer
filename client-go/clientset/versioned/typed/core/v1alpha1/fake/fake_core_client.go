@@ -31,12 +31,20 @@ func (c *FakeFusioninferV1alpha1) ClusterModels() v1alpha1.ClusterModelInterface
 	return newFakeClusterModels(c)
 }
 
+func (c *FakeFusioninferV1alpha1) ClusterRuntimeProfiles() v1alpha1.ClusterRuntimeProfileInterface {
+	return newFakeClusterRuntimeProfiles(c)
+}
+
 func (c *FakeFusioninferV1alpha1) InferenceServices(namespace string) v1alpha1.InferenceServiceInterface {
 	return newFakeInferenceServices(c, namespace)
 }
 
 func (c *FakeFusioninferV1alpha1) Models(namespace string) v1alpha1.ModelInterface {
 	return newFakeModels(c, namespace)
+}
+
+func (c *FakeFusioninferV1alpha1) RuntimeProfiles(namespace string) v1alpha1.RuntimeProfileInterface {
+	return newFakeRuntimeProfiles(c, namespace)
 }
 
 // RESTClient returns a RESTClient that is used to communicate

@@ -25,10 +25,14 @@ import (
 type Interface interface {
 	// ClusterModels returns a ClusterModelInformer.
 	ClusterModels() ClusterModelInformer
+	// ClusterRuntimeProfiles returns a ClusterRuntimeProfileInformer.
+	ClusterRuntimeProfiles() ClusterRuntimeProfileInformer
 	// InferenceServices returns a InferenceServiceInformer.
 	InferenceServices() InferenceServiceInformer
 	// Models returns a ModelInformer.
 	Models() ModelInformer
+	// RuntimeProfiles returns a RuntimeProfileInformer.
+	RuntimeProfiles() RuntimeProfileInformer
 }
 
 type version struct {
@@ -47,6 +51,11 @@ func (v *version) ClusterModels() ClusterModelInformer {
 	return &clusterModelInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }
 
+// ClusterRuntimeProfiles returns a ClusterRuntimeProfileInformer.
+func (v *version) ClusterRuntimeProfiles() ClusterRuntimeProfileInformer {
+	return &clusterRuntimeProfileInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+}
+
 // InferenceServices returns a InferenceServiceInformer.
 func (v *version) InferenceServices() InferenceServiceInformer {
 	return &inferenceServiceInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
@@ -55,4 +64,9 @@ func (v *version) InferenceServices() InferenceServiceInformer {
 // Models returns a ModelInformer.
 func (v *version) Models() ModelInformer {
 	return &modelInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
+// RuntimeProfiles returns a RuntimeProfileInformer.
+func (v *version) RuntimeProfiles() RuntimeProfileInformer {
+	return &runtimeProfileInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }

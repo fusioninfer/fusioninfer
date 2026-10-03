@@ -81,7 +81,7 @@ spec:
 
 ## 平台，而非推理引擎 {#a-platform-not-an-inference-engine}
 
-FusionInfer 不负责模型执行。vLLM 等引擎仍然在工作负载容器中运行。FusionInfer 专注于这些引擎周围的 Kubernetes 控制平面，目前的范围是 LLM 推理，而非通用机器学习工作负载。
+FusionInfer 不负责模型执行。vLLM 等推理引擎仍然在工作负载容器中运行。FusionInfer 专注于这些推理引擎周围的 Kubernetes 控制平面，目前的范围是 LLM 推理，而非通用机器学习工作负载。
 
 ## 开始探索 {#start-exploring}
 

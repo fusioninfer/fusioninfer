@@ -16,7 +16,7 @@ InferenceDeployment 使用 `replicas.<role>` 控制每个角色运行多少个�
 
 RuntimeProfile 定义每个逻辑副本如何运行：
 
-- `podTemplate` 定义该副本中 Pod 的镜像、资源和引擎参数。
+- `podTemplate` 定义该副本中 Pod 的镜像、资源和推理引擎参数。
 - `multinode.nodeCount` 定义该副本包含多少个 Pod。
   - 未设置 `multinode` 时，`nodeCount` 按 1 处理。
   - 设置 `nodeCount: 4` 时，一个副本包含一个 Leader 和三个 Worker。
@@ -40,7 +40,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --tensor-parallel-size
               - "8"
               - --pipeline-parallel-size
@@ -126,7 +126,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --port
               - "8000"
               - --tensor-parallel-size
@@ -256,7 +256,7 @@ spec:
               - vllm
               - serve
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --tensor-parallel-size
               - "8"
               - --pipeline-parallel-size
@@ -289,7 +289,7 @@ spec:
               - vllm
               - serve
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --tensor-parallel-size
               - "8"
               - --pipeline-parallel-size
@@ -325,6 +325,8 @@ Volcano 将其识别为两个四 Pod subgroup。单节点 Aggregated 部署使�
 
 Prefill/Decode Profile 同时包含 `prefiller` 和 `decoder`。Controller 为整个 P/D revision 生成一个 DisaggregatedSet；每个 role 映射为一个由 DisaggregatedSet 管理的 LeaderWorkerSet。两个角色可以拥有不同的 Pod 模板、逻辑副本数和 `nodeCount`，DisaggregatedSet 负责统一 revision、协调 rollout、角色状态和 Headless Service。
 
+backend 为 vLLM、`kvTransfer.connector` 为 `nixl` 时，Controller 为 Prefiller 和 Decoder 的每个 Pod 注入 `VLLM_NIXL_SIDE_CHANNEL_HOST`，值为本 Pod 的 IP。NixlConnector 默认用 `localhost` 做握手，跨 Pod 时 Decoder 需要这个地址才能连上 Prefiller。
+
 该映射要求集群安装包含 `disaggregatedset.x-k8s.io/v1` CRD 的 LeaderWorkerSet v0.9.0 或更高版本。Controller 在启动时发现该 API；缺少时，P/D InferenceDeployment 将 `WorkloadsReady` Condition 设为 `False`，`reason` 为 `DisaggregatedSetUnavailable`。
 
 该配置规定每个 Prefiller 副本使用两个节点、每个 Decoder 副本使用四个节点。InferenceDeployment 请求一个 Prefiller 副本和两个 Decoder 副本：
@@ -336,6 +338,8 @@ metadata:
   name: vllm-pd-2x4-h100-r1
 spec:
   backend: vllm
+  kvTransfer:
+    connector: nixl
   prefiller:
     multinode:
       nodeCount: 2
@@ -345,7 +349,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --port
               - "8000"
               - --tensor-parallel-size
@@ -353,7 +357,7 @@ spec:
               - --data-parallel-size
               - "1"
               - --kv-transfer-config
-              - '{"kv_connector":"NixlConnector","kv_role":"kv_producer"}'
+              - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
             ports:
               - name: http
                 containerPort: 8000
@@ -371,7 +375,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --port
               - "8000"
               - --tensor-parallel-size
@@ -381,7 +385,7 @@ spec:
               - --data-parallel-size
               - "1"
               - --kv-transfer-config
-              - '{"kv_connector":"NixlConnector","kv_role":"kv_consumer"}'
+              - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
             ports:
               - name: http
                 containerPort: 8000
@@ -579,11 +583,11 @@ LWS_WORKER_INDEX     Worker 在当前 group 中的索引
 LWS_GROUP_SIZE       当前 group 的总 Pod 数
 ```
 
-backend adapter 把这些值转换为对应引擎的 executor、地址、rank 和节点数参数。RuntimeProfile 不能声明 adapter 管理的 executor、地址、rank、`nnodes` 或 headless 参数；发生冲突时 Controller 拒绝生成工作负载。
+backend adapter 把这些值转换为对应推理引擎的 executor、地址、rank 和节点数参数。RuntimeProfile 不能声明 adapter 管理的 executor、地址、rank、`nnodes` 或 headless 参数；发生冲突时 Controller 拒绝生成工作负载。
 
 ### vLLM {#vllm}
 
-多节点 vLLM 固定使用原生 multiprocessing executor。RuntimeProfile 只声明模型和 TP/PP/DP 等引擎参数；backend adapter 为每个 Pod 注入 `--distributed-executor-backend mp` 及组内启动参数。
+多节点 vLLM 固定使用原生 multiprocessing executor。RuntimeProfile 只声明模型和 TP/PP/DP 等推理引擎参数；backend adapter 为每个 Pod 注入 `--distributed-executor-backend mp` 及组内启动参数。
 
 每个 Pod 都运行 `vllm serve`。Leader 使用：
 
@@ -616,7 +620,7 @@ Leader 使用：
 
 ```bash
 python3 -m sglang.launch_server \
-  --model-path "${FUSION_MODEL_PATH}" \
+  --model-path "${FUSIONINFER_MODEL_PATH}" \
   --tp-size 16 \
   --dp-size 1 \
   --dist-init-addr "${LWS_LEADER_ADDRESS}:29500" \
@@ -624,11 +628,11 @@ python3 -m sglang.launch_server \
   --node-rank 0
 ```
 
-Worker 使用相同的引擎参数，只替换 rank：
+Worker 使用相同的推理引擎参数，只替换 rank：
 
 ```bash
 python3 -m sglang.launch_server \
-  --model-path "${FUSION_MODEL_PATH}" \
+  --model-path "${FUSIONINFER_MODEL_PATH}" \
   --tp-size 16 \
   --dp-size 1 \
   --dist-init-addr "${LWS_LEADER_ADDRESS}:29500" \
@@ -642,7 +646,7 @@ python3 -m sglang.launch_server \
 
 RuntimeProfile 固定模型参数、TP/PP/DP、镜像和每 Pod 资源。backend adapter 固定 vLLM 的 multiprocessing executor，并添加随 Leader/Worker 变化的地址、rank、节点数和 headless 参数；LWS 提供 group 内的地址与索引。
 
-adapter 只接受 Operator 版本明确支持的入口形式，例如 `vllm serve` 和 `python3 -m sglang.launch_server`。它可以识别有限且有版本约束的参数，但不会解析任意 shell 脚本，也不会验证模型结构与 TP/PP/DP 的数学兼容性。无法识别的入口、重复的保留参数或不支持的参数组合都会使新工作负载保持未创建状态。
+adapter 只接受当前 FusionInfer 版本明确支持的入口形式，例如 `vllm serve` 和 `python3 -m sglang.launch_server`。它可以识别有限且有版本约束的参数，但不会解析任意 shell 脚本，也不会验证模型结构与 TP/PP/DP 的数学兼容性。无法识别的入口、重复的保留参数或不支持的参数组合都会使新工作负载保持未创建状态。
 
 ## Gang Scheduling {#gang-scheduling}
 
@@ -682,13 +686,13 @@ PodGroup 使用全局准入和逻辑副本原子性两个层次：
 
 共享 PodGroup 的 `minMember` 覆盖待发布 revision 的全部期望成员，因此该 revision 不支持只调度部分期望容量。资源不足时新 LWS 保持 Pending，上一 active revision 继续接收流量。该行为与“所有期望逻辑副本 Ready 后才提升 revision”的发布条件一致。
 
-Controller 把生成的 Pod `schedulerName` 设置为 Operator 配置的 Volcano scheduler。RuntimeProfile 中的 `schedulerName` 必须为空或与该值一致；冲突值会被拒绝，不进行静默覆盖。
+Controller 把生成的 Pod `schedulerName` 设置为 FusionInfer 配置的 Volcano scheduler。RuntimeProfile 中的 `schedulerName` 必须为空或与该值一致；冲突值会被拒绝，不进行静默覆盖。
 
-`SubGroupPolicy` 需要 Volcano v1.14 或更高版本。Operator 启动时必须发现 PodGroup CRD 是否包含 `spec.subGroupPolicy`；缺少该能力时，InferenceDeployment 将 `WorkloadsReady` Condition 设为 `False`，`reason` 为 `UnsupportedVolcanoVersion`，不能静默退化为只有 `minMember` 的调度。
+`SubGroupPolicy` 需要 Volcano v1.14 或更高版本。Controller 启动时必须发现 PodGroup CRD 是否包含 `spec.subGroupPolicy`；缺少该能力时，InferenceDeployment 将 `WorkloadsReady` Condition 设为 `False`，`reason` 为 `UnsupportedVolcanoVersion`，不能静默退化为只有 `minMember` 的调度。
 
 ## 扩缩容 {#scaling}
 
-只修改 InferenceDeployment 的 `replicas` 不改变 RuntimeProfile 中的节点数、Pod 资源或引擎参数：
+只修改 InferenceDeployment 的 `replicas` 不改变 RuntimeProfile 中的节点数、Pod 资源或推理引擎参数：
 
 - Aggregated 扩缩容更新 standalone LWS 的 `spec.replicas`。
 - P/D 扩缩容更新 DisaggregatedSet 对应 role 的 `spec.replicas`，DisaggregatedSet 再驱动 child LWS。
@@ -709,7 +713,7 @@ Model、RuntimeProfile 或缓存模式变化会产生新的 template hash。Cont
 只有以下条件同时满足时才提升新 revision：
 
 - 所需的模型缓存副本已经就绪。
-- 预加载模式下，全部 LoRA 已完成下载和缓存，并随引擎启动成功。
+- 预加载模式下，全部 LoRA 已完成下载和缓存，并随推理引擎启动成功。
 - 每个逻辑副本的 Leader 和全部 Worker 都 Ready。
 - Aggregated 或 Prefill/Decode 的全部期望逻辑副本 Ready。
 - 角色 Service 已产生 Ready Endpoint。

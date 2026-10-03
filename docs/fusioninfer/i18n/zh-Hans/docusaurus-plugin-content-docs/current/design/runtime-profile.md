@@ -5,12 +5,14 @@ description: 定义可复用的运行模板，用于 Aggregated、Prefill/Decode
 
 ## 概述 {#overview}
 
-`RuntimeProfile` 和 `ClusterRuntimeProfile` 声明可复用的推理运行模板，包括 backend、推理镜像、启动参数、LoRA 加载能力、Pod 形态以及 Aggregated 或 Prefill/Decode 角色：
+`RuntimeProfile` 和 `ClusterRuntimeProfile` 声明可复用的推理运行模板，包括推理引擎（`backend`）、推理镜像和启动参数、LoRA 适配器的加载方式、单节点或多节点部署、Aggregated 或 Prefill/Decode 角色、默认的 Endpoint Picker 策略，以及 P/D 的 KV 传输方式。两者只有作用范围不同：
 
 - `RuntimeProfile` 是 Namespaced 资源，用于 Namespace 内复用。
 - `ClusterRuntimeProfile` 是 Cluster-scoped 资源，用于跨 Namespace 共享。
 
-两个 Kind 使用相同的 `RuntimeProfileSpec`。Profile 描述每个角色的单个逻辑副本，不包含部署副本数，也不绑定具体 Model。下面是一个最小的 Aggregated 结构示例：
+`RuntimeProfile` 和 `ClusterRuntimeProfile` 使用相同的 `RuntimeProfileSpec`。Profile 描述每个角色的单个逻辑副本，不包含部署副本数，也不绑定具体 Model。
+
+下面是一个 Aggregated RuntimeProfile 的示例。它使用 vLLM 推理引擎，Pod 模板中的 `engine` 容器运行 vLLM 镜像，从 Controller 注入的 `$(FUSIONINFER_MODEL_PATH)` 读取模型，并通过名为 `http` 的 8000 端口提供推理服务：
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -27,7 +29,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
             ports:
               - name: http
                 containerPort: 8000
@@ -40,23 +42,27 @@ spec:
 `RuntimeProfile` 与 `ClusterRuntimeProfile` 共享以下 Go 接口：
 
 ```go
-// +kubebuilder:validation:Enum=vllm;sglang;trtllm
+// RuntimeBackend 是运行时使用的推理引擎。
+// +kubebuilder:validation:Enum=vllm;sglang
 type RuntimeBackend string
 
 const (
     RuntimeBackendVLLM   RuntimeBackend = "vllm"
     RuntimeBackendSGLang RuntimeBackend = "sglang"
-    RuntimeBackendTRTLLM RuntimeBackend = "trtllm"
 )
 
+// RuntimeProfileSpec 声明可复用的推理运行时，由 RuntimeProfile 与 ClusterRuntimeProfile 共用。
 type RuntimeProfileSpec struct {
-    Backend    RuntimeBackend        `json:"backend"`
-    LoRA       *RuntimeLoRASpec       `json:"lora,omitempty"`
-    Aggregated *RuntimeComponentSpec `json:"aggregated,omitempty"`
-    Prefiller  *RuntimeComponentSpec `json:"prefiller,omitempty"`
-    Decoder    *RuntimeComponentSpec `json:"decoder,omitempty"`
+    Backend        RuntimeBackend        `json:"backend"`
+    LoRA           *RuntimeLoRASpec      `json:"lora,omitempty"`
+    EndpointPicker *EndpointPickerSpec   `json:"endpointPicker,omitempty"`
+    KVTransfer     *KVTransferSpec       `json:"kvTransfer,omitempty"`
+    Aggregated     *RuntimeComponentSpec `json:"aggregated,omitempty"`
+    Prefiller      *RuntimeComponentSpec `json:"prefiller,omitempty"`
+    Decoder        *RuntimeComponentSpec `json:"decoder,omitempty"`
 }
 
+// LoRALoadingMode 表示运行时在什么时候加载绑定的 LoRA 适配器。
 // +kubebuilder:validation:Enum=preload;dynamic
 type LoRALoadingMode string
 
@@ -65,160 +71,246 @@ const (
     LoRALoadingModeDynamic LoRALoadingMode = "dynamic"
 )
 
+// RuntimeLoRASpec 声明运行时如何加载 InferenceDeployment 绑定的 LoRA 适配器。
 type RuntimeLoRASpec struct {
     LoadingMode LoRALoadingMode `json:"loadingMode"`
-
-    // 单个 InferenceDeployment 的控制面上限。
-    // +kubebuilder:validation:Minimum=1
-    MaxLoadedAdapters int32 `json:"maxLoadedAdapters"`
 }
 
+// EndpointPickerSpec 声明 Endpoint Picker 如何在逻辑副本之间分配请求，InferenceDeployment 也使用这个类型。
+type EndpointPickerSpec struct {
+    // 复用现有的 v1alpha1 RoutingStrategy 类型，只允许以下三种取值。
+    // +kubebuilder:validation:Enum=prefix-cache;kv-cache-utilization;queue-size
+    Strategy RoutingStrategy `json:"strategy"`
+}
+
+// KVConnector 是把 KV cache 从 Prefiller 传到 Decoder 的 connector。
+// +kubebuilder:validation:Enum=nixl
+type KVConnector string
+
+const (
+    KVConnectorNIXL KVConnector = "nixl"
+)
+
+// KVTransferSpec 声明 Prefiller 如何把 KV cache 传给 Decoder。
+type KVTransferSpec struct {
+    Connector KVConnector `json:"connector"`
+}
+
+// RuntimeComponentSpec 声明一个角色：单个逻辑副本的 Pod 模板，以及副本是否跨多个节点。
 type RuntimeComponentSpec struct {
-    // 解码并校验为 corev1.PodTemplateSpec。
-    // +kubebuilder:pruning:PreserveUnknownFields
-    PodTemplate runtime.RawExtension `json:"podTemplate"`
-
-    Multinode *MultinodeSpec `json:"multinode,omitempty"`
+    PodTemplate corev1.PodTemplateSpec `json:"podTemplate"`
+    Multinode   *MultinodeSpec         `json:"multinode,omitempty"`
 }
 
+// MultinodeSpec 声明跨多个节点的逻辑副本，包含一个 Leader 和 nodeCount - 1 个 Worker。
 type MultinodeSpec struct {
     // +kubebuilder:validation:Minimum=2
     NodeCount int32 `json:"nodeCount"`
 }
 ```
 
-`podTemplate` 使用 `runtime.RawExtension`，避免在 CRD 中重复展开完整 Kubernetes Pod schema。Admission 和 Controller 必须将其严格解码为当前支持的 `corev1.PodTemplateSpec`。
+### 推理模式与角色 {#role-fields}
 
-### 角色字段 {#role-fields}
+角色字段的组合决定推理模式：
 
-合法的角色字段组合如下：
+| 角色字段 | 结果 |
+| --- | --- |
+| 只设置 `aggregated` | 聚合推理 |
+| 同时设置 `prefiller` 和 `decoder` | Prefill/Decode 分离 |
+| `aggregated` 与 `prefiller` 或 `decoder` 同时设置 | 不合法 |
+| 只设置 `prefiller` 和 `decoder` 中的一个 | 不合法 |
+| 三个都不设置 | 不合法 |
 
-- 只设置 `aggregated` 表示聚合推理。
-- 同时设置 `prefiller` 和 `decoder` 表示 Prefill/Decode 分离。
-- `aggregated` 不能与 `prefiller` 或 `decoder` 共存。
-- `prefiller` 和 `decoder` 必须同时出现。
+每个角色使用相同的 `RuntimeComponentSpec`，由 `multinode` 决定一个逻辑副本由几个 Pod 组成：
 
-每个角色使用相同的 `RuntimeComponentSpec`：
-
-- 未设置 `multinode` 时，`podTemplate` 表示一个完整的单节点逻辑副本。
-- 设置 `multinode` 时，`nodeCount` 表示每个逻辑副本使用的总节点数，其中包含一个 Leader 和 `nodeCount - 1` 个 Worker。
-- Leader 和 Worker 都由同一份 `podTemplate` 派生，并且必须分布在不同 Kubernetes Node。
-- 单节点多 GPU 引擎不应设置 `multinode`，而应在一个 Pod 中申请多张 GPU。
+|  | 未设置 `multinode` | 设置 `multinode.nodeCount: N` |
+| --- | --- | --- |
+| 逻辑副本 | 一个 Pod，运行在一个节点上 | N 个 Pod，分布在 N 个不同的 Kubernetes Node 上：1 个 Leader 和 N - 1 个 Worker |
+| Pod 模板 | `podTemplate` 就是这个 Pod | Leader 和 Worker 都由同一份 `podTemplate` 派生 |
+| 适用场景 | 单节点推理。单节点多 GPU 的推理引擎也属于这种情况，在一个 Pod 中申请多张 GPU | 需要跨多个节点运行的模型 |
 
 例如，`multinode.nodeCount: 4` 表示一个逻辑副本由 1 个 Leader Pod 和 3 个 Worker Pod 组成。如果对应的 `InferenceDeployment` 设置 `replicas.aggregated: 2`，Controller 会创建 2 个这样的逻辑副本，也就是 2 个 Leader Pod 和 6 个 Worker Pod，共 8 个 Pod。
 
+```mermaid
+flowchart TB
+    Profile["RuntimeProfile<br/>multinode.nodeCount: 4"]
+    Deployment["InferenceDeployment<br/>replicas.aggregated: 2"]
+    Controller["Controller"]
+
+    Profile --> Controller
+    Deployment --> Controller
+    Controller --> Replica0
+    Controller --> Replica1
+
+    subgraph Replica0["逻辑副本 0"]
+        direction LR
+        Leader0["Leader"] ~~~ Worker01["Worker"] ~~~ Worker02["Worker"] ~~~ Worker03["Worker"]
+    end
+
+    subgraph Replica1["逻辑副本 1"]
+        direction LR
+        Leader1["Leader"] ~~~ Worker11["Worker"] ~~~ Worker12["Worker"] ~~~ Worker13["Worker"]
+    end
+```
+
 ### Backend 分布式运行 {#distributed-backend-execution}
 
-`backend` 必填，支持 `vllm`、`sglang` 和 `trtllm`。它只选择引擎适配器；Aggregated 或 P/D 模式仍由角色字段组合决定。同一 RuntimeProfile 中的所有角色使用相同 backend。
+当前支持 `vllm` 和 `sglang` 两种 backend，一个 RuntimeProfile 的所有角色都使用同一种 backend。设置 `multinode` 后，Controller 用同一份 `podTemplate` 生成 Leader 和 Worker，并按 backend 注入各自的分布式启动参数。
 
-设置 `multinode` 后，Controller 根据 backend 和 Pod 在逻辑副本中的角色生成启动配置：
+两种 backend 的多节点启动方式如下：
 
-- RuntimeProfile 作者只声明一次镜像、TP/PP/DP 等引擎并行参数、资源和调度约束，不再分别编写 Leader 与 Worker 模板。
-- `multinode.nodeCount`、每个 Pod 的加速器资源和引擎并行参数固定在 RuntimeProfile 中。
-- Leader 负责建立分布式运行环境并启动推理服务；Worker 只加入该逻辑副本的分布式运行环境。
-- backend adapter 可以包装或重写生成后 Pod 中 `engine` 容器的 `command` 和 `args`，但仅用于注入 multiprocessing executor、地址、rank、`nnodes` 等 Leader/Worker 编排差异。
-- adapter 不根据 `nodeCount` 推导或修改 RuntimeProfile 声明的 TP/PP/DP；这些引擎并行参数在所有逻辑副本中保持不变。
-- adapter 只处理分布式启动所需的差异；用户声明的环境变量、资源、volume、探针和调度约束继续应用于所有 Pod。
-- Controller 不根据镜像名或任意命令字符串猜测 backend。
+- vLLM 使用原生的 multiprocessing executor，Worker 以 headless 模式加入 Leader，具体参数见[工作负载编排：vLLM](./workload-orchestration.md#vllm)。
+- SGLang 使用原生的分布式启动方式，只有 rank 0 对外提供 HTTP 服务，具体参数见[工作负载编排：SGLang](./workload-orchestration.md#sglang)。
 
-多节点 vLLM 固定使用 multiprocessing executor，`--distributed-executor-backend mp` 及组内启动参数由 backend adapter 注入。SGLang 使用原生分布式启动。Leader/Worker 命令和受管参数见 [工作负载编排：Backend 分布式运行](./workload-orchestration.md#backend-distributed-execution)。
+### LoRA 加载方式 {#lora-loading-capabilities}
 
-每个 backend 的受支持镜像契约、入口形式和 adapter 保留的编排参数必须随 Operator 版本记录并测试。RuntimeProfile 不能预先声明由 adapter 管理的 executor、地址、rank、`nnodes` 或 headless 参数；发生冲突或自定义入口无法处理时，Controller 在消费 RuntimeProfile 时拒绝创建新工作负载。adapter 只识别版本化契约中的有限参数，不解析任意 CLI 或 shell 脚本，也不验证模型与 TP/PP/DP 的数学兼容性；这些参数由 Profile 作者负责验证。
+`spec.lora` 声明 RuntimeProfile 的 LoRA 配置：
 
-### LoRA 加载能力 {#lora-loading-capabilities}
+- `loadingMode: preload`：推理引擎启动时加载全部 LoRA，绑定变化时会按新的 LoRA 列表重新部署工作负载。
+- `loadingMode: dynamic`：在运行中的推理引擎上加载和卸载 LoRA，绑定变化不会重启 Base Model。
 
-`spec.lora` 声明该 Profile 能否消费 `InferenceDeployment.spec.lora`，并固定 LoRA 的加载生命周期：
+下面的示例以 `dynamic` 方式加载 LoRA，LoRA 容量由 `podTemplate` 中的推理引擎参数（例如 vLLM 的 `--max-loras`）决定：
 
-- 省略 `lora` 时，该 Profile 不接受 LoRA 绑定。
-- `loadingMode: preload` 在引擎启动前下载、缓存并挂载全部 LoRA。绑定集合变化会生成新的 workload revision。
-- `loadingMode: dynamic` 在 Base Model 工作负载运行后加载或卸载 LoRA，不因绑定集合变化重启 Base Model。
-- `maxLoadedAdapters` 限制单个 InferenceDeployment 可以同时绑定的 LoRA 数量。
+```yaml
+spec:
+  backend: vllm
+  lora:
+    loadingMode: dynamic
+  aggregated:
+    podTemplate:
+      spec:
+        containers:
+          - name: engine
+            args:
+              - $(FUSIONINFER_MODEL_PATH)
+              - --enable-lora
+              - --max-loras
+              - "8"
+```
 
-`maxLoadedAdapters` 是跨 backend 的控制面上限，不替代引擎自己的显存、CPU 缓存、最大 LoRA rank 或 batch 并发参数。这些 backend-specific 参数继续由 Profile 作者固定在 `podTemplate` 中；对应 backend 的 LoRA 集成会校验已知参数与控制面上限是否兼容，而不会修改 TP/PP/DP。
+`lora` 位于 Profile 顶层，所有角色使用同一种加载方式。LoRA 的加载和卸载流程见 [InferenceDeployment：LoRA 绑定](./inference-deployment.md#lora-bindings)。
 
-LoRA 加载配置位于 Profile 顶层，因此 Aggregated、Prefiller 和 Decoder 使用相同模式。P/D 部署必须把每个 LoRA 加载到 Prefiller 与 Decoder 的全部可路由逻辑副本，不能为两个角色选择不同的加载模式。
+### Endpoint Picker 策略 {#endpoint-picker-strategy}
 
-动态模式由 `InferenceDeployment` Controller 通过 Operator 内置的 backend integration 调用 Pod-local LoRA management endpoint。Controller 是唯一的 Reconciler，持有期望绑定、重试和状态；management endpoint 只执行幂等的 load、unload 和 list 操作。backend 已提供满足契约的管理接口时直接使用；否则 Operator 可以注入薄的无状态代理作为 backend-specific 实现细节，而不是再运行第二个控制循环。管理端口不会加入推理 Service、InferencePool 或 HTTPRoute。
+`spec.endpointPicker.strategy` 声明使用该 Profile 的 InferenceDeployment 默认采用的 Endpoint Picker 策略，决定请求在多个逻辑副本之间怎么分配：
 
-多节点的动态加载以逻辑副本为单位。backend integration 根据引擎能力调用 Leader 协调接口，或向该逻辑副本的全部成员执行受控 fan-out；只有 Leader 和全部 Worker 都确认目标 digest 已加载，该逻辑副本才计为 Ready。成员选择、请求格式和错误归一化隐藏在 backend integration 内，不进入 RuntimeProfile 接口。
+| 策略 | 说明 |
+| --- | --- |
+| `prefix-cache` | 把共享前缀最长的请求发到同一个副本，同时兼顾 KV cache 利用率和排队长度 |
+| `kv-cache-utilization` | 按各副本的 KV cache 占用均衡负载 |
+| `queue-size` | 把请求发到负载最低的副本，缩短排队时间 |
+
+下面的示例把默认策略设为 `prefix-cache`：
+
+```yaml
+spec:
+  backend: vllm
+  endpointPicker:
+    strategy: prefix-cache
+  aggregated:
+    podTemplate:
+      # 省略
+```
+
+InferenceDeployment 可以用 `spec.endpoint.endpointPicker` 覆盖这个默认值；两边都没有设置时，使用 FusionInfer 配置的默认策略。只有 Aggregated 的 Profile 可以设置这个字段，P/D 部署的调度配置由 Controller 根据 Prefiller、Decoder 和 [KV 传输方式](#kv-transfer)自动生成。
+
+### KV 传输 {#kv-transfer}
+
+`spec.kvTransfer.connector` 声明 Prefiller 用哪种 connector 把 KV cache 传给 Decoder。P/D 的 Profile 必须设置这个字段，Aggregated 的 Profile 不能设置。目前只支持 `nixl`：
+
+```yaml
+spec:
+  backend: vllm
+  kvTransfer:
+    connector: nixl
+  prefiller:
+    podTemplate:
+      # 省略
+  decoder:
+    podTemplate:
+      # 省略
+```
+
+这个字段决定 Controller 怎么配置路由、注入什么；推理引擎的 connector 仍然在模板中配置，两边要一致：
+
+| backend | 模板中的写法 | Controller 的处理 |
+| --- | --- | --- |
+| `vllm` | `--kv-transfer-config` 使用 `NixlConnector` | 注入 `VLLM_NIXL_SIDE_CHANNEL_HOST`；路由把 Prefill 返回的传输参数转给 Decode |
+| `sglang` | 写明 `--disaggregation-transfer-backend nixl`，因为 SGLang 默认使用 Mooncake | 路由在请求中带上 Prefill 的地址和 bootstrap 端口 |
+
+vLLM 需要用 LMCache 卸载和复用 KV cache 时，可以用 MultiConnector 把 `NixlConnector` 和 `LMCacheConnectorV1` 组合起来，`connector` 仍然写 `nixl`。这时 `--kv-transfer-config` 的值是：
+
+```json
+{
+  "kv_connector": "MultiConnector",
+  "kv_role": "kv_both",
+  "kv_connector_extra_config": {
+    "connectors": [
+      {"kv_connector": "NixlConnector", "kv_role": "kv_both"},
+      {"kv_connector": "LMCacheConnectorV1", "kv_role": "kv_both"}
+    ]
+  }
+}
+```
+
+SGLang 的 bootstrap 端口默认是 8998。Prefiller 用 `--disaggregation-bootstrap-port` 改了端口时，要在 `engine` 容器中用命名端口 `bootstrap` 声明同一个端口，Controller 据此配置路由：
+
+```yaml
+prefiller:
+  podTemplate:
+    spec:
+      containers:
+        - name: engine
+          args:
+            # 省略其他参数
+            - --disaggregation-bootstrap-port
+            - "30001"
+          ports:
+            - name: http
+              containerPort: 8000
+            - name: bootstrap
+              containerPort: 30001
+```
 
 ### Pod 模板 {#podtemplate}
 
-Pod 模板是完整的 `corev1.PodTemplateSpec`，但只允许一层模板：
+`podTemplate` 是完整的 [`corev1.PodTemplateSpec`](https://github.com/kubernetes/api/blob/v0.35.3/core/v1/types.go#L5483-L5494)。推理引擎运行在名为 `engine` 的容器中，通过命名端口 `http` 提供服务；多节点时只有 Leader 接收推理请求。SGLang P/D 的 Prefiller 还可以用命名端口 `bootstrap` 声明 bootstrap 端口，见 [KV 传输](#kv-transfer)。
 
-- 每个角色的 `podTemplate` 必须包含名为 `engine` 的容器。
-- `engine` 必须声明唯一的命名端口 `http`；多节点模式只把 Leader 注册为服务 Endpoint。
-- 所有 Pod 使用 Operator 配置的 Volcano scheduler；模板中的 `schedulerName` 必须为空或与该配置一致。
-- 同一份模板的 metadata、容器、资源和调度约束应用于 Leader 与 Worker，backend adapter 只生成角色相关的启动配置和保留环境变量。
-- `InferenceDeployment` 不提供第二层 Pod override。
-- 模板 `metadata` 只允许设置 labels 和 annotations；资源名称、Namespace、OwnerReference、finalizer 和其他服务端元数据由 Controller 管理。
-- 配置 `lora` 时，模板入口必须符合对应 backend 的 LoRA 契约。Profile 负责声明引擎的 LoRA enablement、rank 和 backend-specific 容量参数；Deployment 不能覆盖这些参数。
-- 动态模式所需的管理端口、volume、mount 和环境变量由 Operator 注入，模板不能占用这些保留名称。只有 backend 原生接口不能满足内部 lifecycle 契约时才注入薄的无状态代理；该代理不持有期望状态，也不执行独立调和。
+Controller 会在生成的 Pod 中自动注入以下内容，模板中不能再声明这些名称和路径，否则创建或更新 Profile 时会被拒绝：
 
-Operator 在所有 `engine` 容器中提供统一的模型挂载契约：
+| 类型 | 名称 | 说明 |
+| --- | --- | --- |
+| 环境变量 | `FUSIONINFER_MODEL_PATH` | 值为模型目录 `/models`。启动命令应通过 `$(FUSIONINFER_MODEL_PATH)` 读取模型 |
+| 环境变量 | `VLLM_NIXL_SIDE_CHANNEL_HOST` | `kvTransfer.connector` 为 `nixl` 时，注入 vLLM 的 P/D 角色，值为本 Pod 的 IP，供 NixlConnector 完成 Prefiller 和 Decoder 之间的握手 |
+| Volume | `fusioninfer-model` | 只读挂载模型目录 `/models` |
+| Volume | `fusioninfer-lora` | 只读挂载 LoRA 目录 `/adapters`，只包含当前 Deployment 绑定的 LoRA |
+| Init container | `fusioninfer-model-init` | 检查节点上的模型缓存，缺失时下载模型 |
 
-```text
-volume: fusioninfer-model
-volume: fusioninfer-model-metadata
-initContainer: fusioninfer-model-init
-env: FUSION_MODEL_PATH
-env: FUSION_MODEL_METADATA_PATH
-volume: fusioninfer-lora
-env: FUSION_LORA_ROOT
-env: FUSION_LORA_MANIFEST
-```
+InferenceDeployment 绑定了 LoRA 时，Controller 才会注入 `fusioninfer-lora`，并按加载方式把 LoRA 交给推理引擎：
 
-模型内容以只读方式挂载到固定路径 `/models`，并注入：
+- `preload`：把绑定的 LoRA 写进启动参数，推理引擎启动时加载。例如 InferenceDeployment 绑定了 `finance` 和 `customer-support` 两个 LoRA 时，Controller 会在 vLLM 的启动参数后面追加：
 
-```text
-FUSION_MODEL_PATH=/models
-FUSION_MODEL_METADATA_PATH=/var/run/fusioninfer/model/model.json
-```
+  ```bash
+  --lora-modules \
+    finance=/adapters/qwen3-8b-finance-lora-r1 \
+    customer-support=/adapters/qwen3-8b-support-lora-r1
+  ```
 
-Runtime 命令应通过 `$(FUSION_MODEL_PATH)` 读取模型，不应写死缓存根目录。Profile 不能声明上述保留字段，也不能覆盖 Operator 管理的模型下载组件或 Endpoint Picker 镜像。
+  每个 LoRA 一项，等号左边是请求中选择该 LoRA 用的模型名，右边是它在 `/adapters` 下的路径。
 
-声明 LoRA 绑定时，Operator 还把当前 Deployment 的 adapter projection 只读挂载到 `/adapters`，并生成 `/var/run/fusioninfer/lora/adapters.json`。Manifest 使用内部 binding key 映射 `servedName`、resolved Model UID、digest 和容器内路径；路径不直接使用用户提供的 served name。引擎容器只能看到当前 Deployment 已绑定的 LoRA，不能浏览节点缓存根目录。
+- `dynamic`：开启推理引擎的运行时 LoRA 接口，例如为 vLLM 设置 `VLLM_ALLOW_RUNTIME_LORA_UPDATING=true`；Pod 运行后，Controller 调用这个接口加载和卸载 LoRA。
 
-生产环境中的推理镜像必须使用 OCI digest 固定。以下示例使用官方版本化镜像 `vllm/vllm-openai:v0.27.1` 以保持可读性，部署时需要替换为对应版本的 digest-pinned 镜像。
-
-### 作用域与引用 {#scope-and-references}
-
-`RuntimeProfile` 自身不包含 `modelRef`。具体 Model、运行模板和副本数由 `InferenceDeployment` 绑定。
-
-Pod 模板可以引用 ServiceAccount、Secret、ConfigMap 和 PVC：
-
-- `RuntimeProfile` 中的 Namespaced 依赖在 Profile 所在 Namespace 中解析。
-- `ClusterRuntimeProfile` 中的 Namespaced 依赖名称在消费它的 `InferenceDeployment` Namespace 中解析。
-- `ClusterRuntimeProfile` 不能固定其他 Namespace 中的依赖。
-- 创建 `ClusterRuntimeProfile` 时只校验引用结构；依赖是否存在由消费方调和并通过 `InferenceDeployment.status` 报告。
-
-Profile 不拥有或修改这些依赖。对启动行为有影响的 ConfigMap 和 Secret 应使用 immutable 对象或版本化名称。
-
-### 默认值与校验 {#defaults-and-validation}
-
-- `backend` 必填，只允许 `vllm`、`sglang` 或 `trtllm`。
-- `lora.loadingMode` 只允许 `preload` 或 `dynamic`；`maxLoadedAdapters` 必须大于等于 1。
-- 只有当前 Operator 版本为指定 backend 和模板入口实现了对应 LoRA 模式时，Profile 才能被消费。
-- 必须设置 `aggregated`，或者同时设置 `prefiller` 和 `decoder`。
-- 每个已声明角色都必须提供 `podTemplate`。
-- 设置 `multinode` 时，`nodeCount` 必须大于等于 2；省略时按单节点处理。
-- RawExtension 必须能够严格解码为 `corev1.PodTemplateSpec`。
-- 模板必须包含 `engine` 容器及唯一的 `http` 命名端口。
-- 模板不能占用 Operator 保留的 volume、init container、环境变量、挂载路径、label 或 annotation。
-- backend adapter 必须支持模板中声明的镜像和入口参数。
-- 模板不能声明 backend adapter 保留的 executor、地址、rank、`nnodes` 或 headless 参数。
-- 模板镜像必须使用 OCI digest 固定。
-- `RuntimeProfile.spec` 和 `ClusterRuntimeProfile.spec` 不可变。修改 backend、镜像、命令、资源、`multinode` 或 Pod 模板时需要创建新对象。
+模板引用的 ServiceAccount、Secret、ConfigMap 和 PVC 都在使用它的 InferenceDeployment 所在的 Namespace 中查找。创建 Profile 时不检查它们是否存在，缺失时由 InferenceDeployment 的 status 报告。
 
 ## Status {#status}
 
-`RuntimeProfile` 和 `ClusterRuntimeProfile` 不提供 status subresource，也不需要独立 Controller。对象内约束由 Admission 校验，Namespace 依赖和实际运行状态由消费它的 `InferenceDeployment.status` 持有。
+`RuntimeProfile` 和 `ClusterRuntimeProfile` 没有 status subresource，也没有自己的 Controller：Profile 本身的错误在创建或更新时就会被 API server 拒绝；引用的对象是否存在、工作负载的运行状态，由使用它的 InferenceDeployment 在 status 中报告。
 
 ## 示例 {#examples}
 
 ### RuntimeProfile：单节点 Aggregated {#runtimeprofile-single-node-aggregated}
 
-该 Profile 描述一个使用单张 GPU 的 Aggregated 逻辑副本。
+下面的例子在单张 A10 GPU 上运行一个 Aggregated 逻辑副本：
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -230,15 +322,12 @@ spec:
   backend: vllm
   aggregated:
     podTemplate:
-      metadata:
-        labels:
-          example.fusioninfer.io/runtime: vllm
       spec:
         containers:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
             ports:
               - name: http
                 containerPort: 8000
@@ -256,9 +345,9 @@ spec:
           accelerator: a10
 ```
 
-### ClusterRuntimeProfile：Prefill/Decode 分离 {#clusterruntimeprofile-prefilldecode-disaggregation}
+### ClusterRuntimeProfile：vLLM P/D 分离 {#clusterruntimeprofile-prefilldecode-disaggregation}
 
-Prefiller 和 Decoder 分别声明 KV 传输角色。Profile 不包含副本数或 Endpoint Picker 策略。
+下面的例子用 vLLM 运行 P/D 分离：`kvTransfer.connector` 为 `nixl`，两个角色的 `--kv-transfer-config` 都使用 `NixlConnector`，`kv_role` 都是 `kv_both`；握手需要的 `VLLM_NIXL_SIDE_CHANNEL_HOST` 由 Controller 注入，模板里不用写。Prefiller 使用两张 GPU（TP=2），Decoder 使用一张。副本数在 InferenceDeployment 中设置；P/D 部署不需要选择 Endpoint Picker 策略，Controller 会根据 Prefiller 和 Decoder 自动生成调度配置。
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -267,6 +356,8 @@ metadata:
   name: vllm-pd-h100-r1
 spec:
   backend: vllm
+  kvTransfer:
+    connector: nixl
   prefiller:
     podTemplate:
       spec:
@@ -274,9 +365,11 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
+              - --tensor-parallel-size
+              - "2"
               - --kv-transfer-config
-              - '{"kv_connector":"NixlConnector","kv_role":"kv_producer"}'
+              - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
             ports:
               - name: http
                 containerPort: 8000
@@ -292,9 +385,9 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --kv-transfer-config
-              - '{"kv_connector":"NixlConnector","kv_role":"kv_consumer"}'
+              - '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
             ports:
               - name: http
                 containerPort: 8000
@@ -305,7 +398,80 @@ spec:
           accelerator: h100
 ```
 
-### RuntimeProfile：多节点 Aggregated {#runtimeprofile-multinode-aggregated}
+### ClusterRuntimeProfile：SGLang P/D 分离 {#clusterruntimeprofile-sglang-prefilldecode-disaggregation}
+
+下面的例子用 SGLang 运行 P/D 分离，Prefiller 和 Decoder 分别用 `--disaggregation-mode prefill` 和 `--disaggregation-mode decode` 启动。`kvTransfer.connector` 为 `nixl`，两个角色都写明 `--disaggregation-transfer-backend nixl`。SGLang 不需要注入 `VLLM_NIXL_SIDE_CHANNEL_HOST` 这类地址：路由在每个请求里带上选中的 Prefill Pod 的地址，Decoder 据此连到 Prefill 的 bootstrap 端口。示例使用默认的 8998 端口，所以没有声明 `bootstrap` 端口。两个角色都要写明 `--host 0.0.0.0` 和 `--port 8000`，与 `http` 端口一致。
+
+```yaml
+apiVersion: fusioninfer.io/v1alpha1
+kind: ClusterRuntimeProfile
+metadata:
+  name: sglang-pd-h100-r1
+spec:
+  backend: sglang
+  kvTransfer:
+    connector: nixl
+  prefiller:
+    podTemplate:
+      spec:
+        containers:
+          - name: engine
+            image: lmsysorg/sglang:v0.5.4
+            command:
+              - python3
+              - -m
+              - sglang.launch_server
+            args:
+              - --model-path
+              - $(FUSIONINFER_MODEL_PATH)
+              - --disaggregation-mode
+              - prefill
+              - --disaggregation-transfer-backend
+              - nixl
+              - --host
+              - "0.0.0.0"
+              - --port
+              - "8000"
+            ports:
+              - name: http
+                containerPort: 8000
+            resources:
+              limits:
+                nvidia.com/gpu: "1"
+        nodeSelector:
+          accelerator: h100
+  decoder:
+    podTemplate:
+      spec:
+        containers:
+          - name: engine
+            image: lmsysorg/sglang:v0.5.4
+            command:
+              - python3
+              - -m
+              - sglang.launch_server
+            args:
+              - --model-path
+              - $(FUSIONINFER_MODEL_PATH)
+              - --disaggregation-mode
+              - decode
+              - --disaggregation-transfer-backend
+              - nixl
+              - --host
+              - "0.0.0.0"
+              - --port
+              - "8000"
+            ports:
+              - name: http
+                containerPort: 8000
+            resources:
+              limits:
+                nvidia.com/gpu: "1"
+        nodeSelector:
+          accelerator: h100
+```
+
+### RuntimeProfile：vLLM 多节点 Aggregated {#runtimeprofile-multinode-aggregated}
 
 每个逻辑副本由一个 Leader Pod 和三个 Worker Pod 组成，共使用四个节点。
 
@@ -326,9 +492,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
-              - --port
-              - "8000"
+              - $(FUSIONINFER_MODEL_PATH)
               - --tensor-parallel-size
               - "8"
               - --pipeline-parallel-size
@@ -345,11 +509,56 @@ spec:
           accelerator: h100
 ```
 
-`backend: vllm` adapter 根据 `nodeCount: 4` 为 Leader 和 Worker 注入 multiprocessing executor、节点数、地址和 rank。它保留 Profile 中固定的 `TP=8`、`PP=4` 和 `DP=1`，用户只维护一份 vLLM 参数和 Pod 模板。
+Controller 根据 `backend: vllm` 和 `nodeCount: 4` 为 Leader 和 Worker 注入 multiprocessing executor、节点数、地址和 rank。它保留 Profile 中固定的 `TP=8`、`PP=4` 和 `DP=1`，用户只维护一份 vLLM 参数和 Pod 模板。
+
+### RuntimeProfile：SGLang 多节点 Aggregated {#runtimeprofile-sglang-multinode-aggregated}
+
+下面的例子用 SGLang 运行跨两个节点的 Aggregated 逻辑副本，每个 Pod 使用八张 GPU，`--tp-size 16` 横跨两个节点。SGLang 默认只监听 `127.0.0.1:30000`，所以模板要写明 `--host 0.0.0.0` 和 `--port 8000`，与 `http` 端口一致。
+
+```yaml
+apiVersion: fusioninfer.io/v1alpha1
+kind: RuntimeProfile
+metadata:
+  name: sglang-aggregated-2node-r1
+  namespace: team-a
+spec:
+  backend: sglang
+  aggregated:
+    multinode:
+      nodeCount: 2
+    podTemplate:
+      spec:
+        containers:
+          - name: engine
+            image: lmsysorg/sglang:v0.5.4
+            command:
+              - python3
+              - -m
+              - sglang.launch_server
+            args:
+              - --model-path
+              - $(FUSIONINFER_MODEL_PATH)
+              - --tp-size
+              - "16"
+              - --host
+              - "0.0.0.0"
+              - --port
+              - "8000"
+            ports:
+              - name: http
+                containerPort: 8000
+            resources:
+              limits:
+                nvidia.com/gpu: "8"
+        nodeSelector:
+          accelerator: h100
+```
+
+Controller 根据 `backend: sglang` 和 `nodeCount: 2` 为每个 Pod 加上 `--dist-init-addr`、`--nnodes` 和 `--node-rank`，其余参数保持模板中的写法，具体见[工作负载编排：SGLang](./workload-orchestration.md#sglang)。
 
 ### RuntimeProfile：动态 LoRA {#runtimeprofile-dynamic-lora}
 
-该 Profile 允许一个 Deployment 动态绑定最多八个 LoRA。vLLM 的 LoRA enablement 和 backend-specific 容量仍固定在 Pod 模板中；Operator 负责配置受保护的 Pod-local management endpoint 和 runtime updating 环境变量，`InferenceDeployment` Controller 通过 backend integration 调和加载状态。
+下面的例子以 `dynamic` 方式加载 LoRA。模板中的 `--enable-lora`、`--max-loras` 和 `--max-cpu-loras` 开启 vLLM 的 LoRA 支持并设置容量；Controller 会为 vLLM 设置 `VLLM_ALLOW_RUNTIME_LORA_UPDATING=true`，再调用它的接口加载和卸载 LoRA。
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -361,7 +570,6 @@ spec:
   backend: vllm
   lora:
     loadingMode: dynamic
-    maxLoadedAdapters: 8
   aggregated:
     podTemplate:
       spec:
@@ -369,7 +577,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH)
+              - $(FUSIONINFER_MODEL_PATH)
               - --enable-lora
               - --max-loras
               - "8"

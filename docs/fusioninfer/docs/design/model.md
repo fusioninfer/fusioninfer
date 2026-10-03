@@ -1,20 +1,20 @@
 ---
 title: Model and ClusterModel
-description: Define namespaced or cluster-scoped immutable model artifacts and optional LoRA adapter bindings.
+description: Define namespaced or cluster-scoped model artifacts and optional LoRA adapter bindings.
 ---
 
 ## Overview {#overview}
 
-`Model` and `ClusterModel` declare the source of a model artifact and its version identifier:
+`Model` and `ClusterModel` declare the source of a model artifact:
 
 - `Model` is a Namespaced resource for models within a Namespace.
 - `ClusterModel` is a cluster-scoped resource for models shared across Namespaces.
 
-Both Kinds use the same `ModelSpec`. Setting only `spec.source` represents a Base Model; setting both `spec.source` and `spec.lora.baseModelRef` represents a LoRA artifact.
+`Model` and `ClusterModel` use the same `ModelSpec`. Setting only `spec.source` represents a Base Model; setting both `spec.source` and `spec.lora.baseModelRef` represents a LoRA artifact.
 
 The model agent that FusionInfer runs on each node downloads model files into the node cache. See [Prefetch](#prefetch) for when downloads happen.
 
-The following example is a minimal Namespaced Base Model:
+The following is an example of a `Model` resource:
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1

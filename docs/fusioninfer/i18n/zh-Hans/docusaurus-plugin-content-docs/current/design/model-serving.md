@@ -103,7 +103,7 @@ spec:
           - name: engine
             image: vllm/vllm-openai:v0.27.1
             args:
-              - $(FUSION_MODEL_PATH) # 控制器注入节点缓存中的模型路径
+              - $(FUSIONINFER_MODEL_PATH) # 控制器注入节点缓存中的模型路径
             ports:
               - name: http
                 containerPort: 8000

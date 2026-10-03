@@ -1,0 +1,26 @@
+apiVersion: fusioninfer.io/v1alpha1
+kind: RuntimeProfile
+metadata:
+  labels:
+    app.kubernetes.io/name: fusioninfer
+    app.kubernetes.io/managed-by: kustomize
+  name: vllm-aggregated-r1
+  namespace: default
+spec:
+  backend: vllm
+  endpointPicker:
+    strategy: prefix-cache
+  aggregated:
+    podTemplate:
+      spec:
+        containers:
+          - name: engine
+            image: vllm/vllm-openai:v0.27.1
+            args:
+              - $(FUSIONINFER_MODEL_PATH)
+            ports:
+              - name: http
+                containerPort: 8000
+            resources:
+              limits:
+                nvidia.com/gpu: "1"

@@ -33,14 +33,20 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 	// Group=fusioninfer.io, Version=v1alpha1
 	case v1alpha1.SchemeGroupVersion.WithKind("ClusterModel"):
 		return &corev1alpha1.ClusterModelApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ClusterRuntimeProfile"):
+		return &corev1alpha1.ClusterRuntimeProfileApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("ComponentStatus"):
 		return &corev1alpha1.ComponentStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("EndpointPickerSpec"):
+		return &corev1alpha1.EndpointPickerSpecApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("InferenceService"):
 		return &corev1alpha1.InferenceServiceApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("InferenceServiceSpec"):
 		return &corev1alpha1.InferenceServiceSpecApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("InferenceServiceStatus"):
 		return &corev1alpha1.InferenceServiceStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("KVTransferSpec"):
+		return &corev1alpha1.KVTransferSpecApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("LoRAArtifactSpec"):
 		return &corev1alpha1.LoRAArtifactSpecApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("Model"):
@@ -55,12 +61,22 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1alpha1.ModelStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("Multinode"):
 		return &corev1alpha1.MultinodeApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("MultinodeSpec"):
+		return &corev1alpha1.MultinodeSpecApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("PrefetchSpec"):
 		return &corev1alpha1.PrefetchSpecApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("PrefetchStatus"):
 		return &corev1alpha1.PrefetchStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("Role"):
 		return &corev1alpha1.RoleApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("RuntimeComponentSpec"):
+		return &corev1alpha1.RuntimeComponentSpecApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("RuntimeLoRASpec"):
+		return &corev1alpha1.RuntimeLoRASpecApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("RuntimeProfile"):
+		return &corev1alpha1.RuntimeProfileApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("RuntimeProfileSpec"):
+		return &corev1alpha1.RuntimeProfileSpecApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("SchedulingStrategy"):
 		return &corev1alpha1.SchedulingStrategyApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("SecretReference"):

@@ -7,7 +7,7 @@ description: 绑定 Model 与 RuntimeProfile，并声明副本数、缓存、路
 
 `InferenceDeployment` 是 Namespaced 资源，用于创建一个可访问的模型推理服务。它通过显式引用绑定 Base Model、可选的多个 LoRA 和 RuntimeProfile，并声明部署副本数、模型的下载与缓存时机，以及 Gateway API 入口。
 
-下面是一个最小的 Aggregated 结构示例。省略 `spec.cache` 时使用默认的 `lazy` 模式。
+下面是一个 `InferenceDeployment` 资源的示例。省略 `spec.cache` 时使用默认的 `lazy` 模式。
 
 ```yaml
 apiVersion: fusioninfer.io/v1alpha1
@@ -86,7 +86,7 @@ type EndpointSpec struct {
 }
 
 type EndpointPickerSpec struct {
-    // 复用现有的 v1alpha1 RoutingStrategy 类型。
+    // 与 RuntimeProfile 共用；复用现有的 v1alpha1 RoutingStrategy 类型。
     // +kubebuilder:validation:Enum=prefix-cache;kv-cache-utilization;queue-size
     Strategy RoutingStrategy `json:"strategy"`
 }
@@ -130,12 +130,12 @@ lora:
 - `modelRef` 必须解析到具有 `spec.lora.baseModelRef` 的 LoRA Model。
 - `servedName` 是 OpenAI-compatible 请求中选择该 LoRA 时使用的模型名称。
 
-Controller 解析 LoRA 后必须确认其 `baseModelRef` 与 Deployment 的 `modelRef` 指向相同 Kind、名称和 UID。相同 `servedName` 和重复 `modelRef` 都会被拒绝。绑定数量不能超过 RuntimeProfile 的 `lora.maxLoadedAdapters`。
+Controller 解析 LoRA 后必须确认其 `baseModelRef` 与 Deployment 的 `modelRef` 指向相同 Kind、名称和 UID。相同 `servedName` 和重复 `modelRef` 都会被拒绝。
 
 引用的 RuntimeProfile 必须声明 `spec.lora`：
 
-- `loadingMode: preload`：Controller 在创建 workload revision 前下载并缓存全部 LoRA，并把绑定清单交给 backend 的启动集成。增加、删除或替换绑定会创建新的 workload revision。
-- `loadingMode: dynamic`：Controller 在现有 Base Model 工作负载上调和加载和卸载，不重启工作负载。增加、删除或替换绑定只更新 LoRA binding revision。
+- `loadingMode: preload`：Controller 在创建 workload revision 前下载并缓存全部 LoRA，并按 backend 把它们写进推理引擎的启动参数。增加、删除或替换绑定会创建新的 workload revision。
+- `loadingMode: dynamic`：Controller 在现有 Base Model 工作负载上调和加载和卸载，不重启工作负载。增加、删除或替换绑定只更新 LoRA binding revision。Pod-local LoRA management endpoint 只执行幂等的 load、unload 和 list，其端口不加入推理 Service、InferencePool 或 HTTPRoute。backend 原生接口不满足这一契约时，Controller 注入一个无状态的薄代理来提供它。
 
 P/D 模式下，同一个绑定必须加载到全部 Prefiller 和 Decoder 逻辑副本。Controller 通过 backend integration 调用各逻辑副本的 Pod-local LoRA management endpoint；backend 可以由 Leader 协调组内加载，也可以由 integration 向全部成员 fan-out。只有该副本的 Leader 和 Worker 都确认目标 digest 已加载后才计为 Ready。
 
@@ -150,7 +150,7 @@ P/D 模式下，同一个绑定必须加载到全部 Prefiller 和 Decoder 逻�
 - 每个值表示对应角色的逻辑副本数，而不是 Pod 数量。
 - RuntimeProfile 为角色配置 `multinode.nodeCount` 时，一个逻辑副本会展开为一个 Leader Pod 和 `nodeCount - 1` 个 Worker Pod。
 
-修改 `replicas` 只会增加或减少可独立路由的逻辑副本，不会改变 RuntimeProfile 固定的 `multinode.nodeCount`、每个 Pod 的加速器资源或 TP/PP/DP。`replicas` 也不等于 backend 的 data parallel size：前者创建独立的工作负载组和服务 Endpoint，后者是单个逻辑副本内部的引擎并行参数。
+修改 `replicas` 只会增加或减少可独立路由的逻辑副本，不会改变 RuntimeProfile 固定的 `multinode.nodeCount`、每个 Pod 的加速器资源或 TP/PP/DP。`replicas` 也不等于 backend 的 data parallel size：前者创建独立的工作负载组和服务 Endpoint，后者是单个逻辑副本内部的推理引擎并行参数。
 
 Deployment 的角色组合必须与引用的 RuntimeProfile 完全一致。引用 Aggregated Profile 时只能设置 `replicas.aggregated`；引用 P/D Profile 时必须同时设置 `replicas.prefiller` 和 `replicas.decoder`。
 
@@ -161,7 +161,7 @@ Deployment 的角色组合必须与引用的 RuntimeProfile 完全一致。引�
 - `lazy`：Pod 调度到节点后，由注入的 init container 检查节点缓存。缓存缺失时下载并校验模型，完成后才启动推理引擎。
 - `eager`：创建新推理工作负载前，先在满足角色调度约束的节点上运行预热 Job。所需的缓存副本全部就绪后才创建新工作负载。
 
-该策略同时应用于 Base Model 和 `spec.lora` 引用的制品。`preload` 模式要求 Base Model 与全部 LoRA 在引擎启动前可读。`dynamic` 模式新增 LoRA 时，`eager` 先在全部目标节点预热，`lazy` 则由目标节点上受信任的下载组件按需下载和缓存；无论哪种缓存模式，都在下载和缓存完成后才调用 backend 加载接口。
+该策略同时应用于 Base Model 和 `spec.lora` 引用的制品。`preload` 模式要求 Base Model 与全部 LoRA 在推理引擎启动前可读。`dynamic` 模式新增 LoRA 时，`eager` 先在全部目标节点预热，`lazy` 则由目标节点上受信任的下载组件按需下载和缓存；无论哪种缓存模式，都在下载和缓存完成后才调用 backend 加载接口。
 
 `eager` 为每个角色按“逻辑副本数 × 有效节点数”计算预热需求。有效节点数来自该角色的 `multinode.nodeCount`，未设置时为 1；Controller 在满足 Pod 模板调度约束的 distinct nodes 上各准备一份模型缓存。
 
@@ -183,10 +183,10 @@ Deployment 的角色组合必须与引用的 RuntimeProfile 完全一致。引�
 `endpointPicker` 只用于 Aggregated 部署：
 
 - 支持 `prefix-cache`、`kv-cache-utilization` 和 `queue-size`。
-- 省略时使用 Operator 配置的默认策略。
+- 省略时使用 RuntimeProfile 中的 `endpointPicker`；Profile 也没有设置时，使用 FusionInfer 配置的默认策略。
 - P/D 部署必须省略该字段；Controller 根据 `prefiller + decoder` 自动生成 Prefill 和 Decode 调度配置。
 
-Endpoint Picker 的镜像、副本数和端口由 Operator 配置管理，不属于 RuntimeProfile 或 InferenceDeployment 的用户接口。
+Endpoint Picker 的镜像、副本数和端口由 FusionInfer 的配置管理，不属于 RuntimeProfile 或 InferenceDeployment 的用户接口。
 
 ### 作用域与引用 {#scope-and-references}
 
@@ -195,7 +195,7 @@ Endpoint Picker 的镜像、副本数和端口由 Operator 配置管理，不属
 - 引用 `Model` 或 `RuntimeProfile` 时，只在 Deployment 所在 Namespace 查找。
 - 引用 `ClusterModel` 或 `ClusterRuntimeProfile` 时，只查找 Cluster-scoped 对象。
 - Namespaced 引用不能指定或访问其他 Namespace。
-- ClusterModel 的凭据和 ClusterRuntimeProfile 中的 Namespaced 依赖都在 Deployment 所在 Namespace 解析。
+- ClusterRuntimeProfile 中的 Namespaced 依赖在 Deployment 所在 Namespace 解析；ClusterModel 的凭据在 FusionInfer 的系统 Namespace 中解析，见 [Model 与 ClusterModel：访问凭据](./model.md#access-credentials)。
 
 跨 Namespace Gateway 是否接受生成的 HTTPRoute，由 Gateway listener 的 `allowedRoutes` 决定。FusionInfer 不修改 Gateway，也不会在引用失败后尝试其他同名对象。
 
@@ -214,9 +214,9 @@ Endpoint Picker 的镜像、副本数和端口由 Operator 配置管理，不属
 - `endpoint.gatewayRef.name` 必填。
 - `endpoint.endpointPicker.strategy` 只允许用于 Aggregated 部署，且必须属于支持的策略集合。
 - RuntimeProfile 角色与 Deployment 副本组合的一致性在引用解析后校验。
-- 声明 `lora` 时，RuntimeProfile 必须支持 LoRA，绑定数量不能超过 `maxLoadedAdapters`。
+- 声明 `lora` 时，引用的 RuntimeProfile 必须声明 `spec.lora`。
 - Controller 必须确认每个绑定引用 LoRA Model，并且其 `baseModelRef` 与 Deployment 的 Base Model 引用解析到相同 UID。
-- RuntimeProfile 的 backend adapter 必须支持模板中的镜像和入口参数，并且不能与模板声明的分布式编排参数冲突；不支持时 Controller 不创建新工作负载，并设置 `ReferencesResolved=False`。
+- 当前 FusionInfer 版本必须支持 RuntimeProfile 模板中的镜像和入口参数，模板也不能声明 Controller 按 backend 注入的参数；否则 Controller 不创建新工作负载，并设置 `ReferencesResolved=False`。
 - `InferenceDeployment.spec` 可以更新；Model、Runtime、缓存模式或 Endpoint Picker 策略变化会产生新的待提升 revision。LoRA 变化是否重建 workload 由 RuntimeProfile 的 `loadingMode` 决定。
 
 不需要读取其他对象的约束由 CRD OpenAPI、CEL 或 Admission 校验。引用是否存在、角色是否一致、Secret/PVC 是否可用以及 Gateway 是否接受 Route，由 Controller 调和并通过 Conditions 报告，因此资源可以按任意顺序创建。
